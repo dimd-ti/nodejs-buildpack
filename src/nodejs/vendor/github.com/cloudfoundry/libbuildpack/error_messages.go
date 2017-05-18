@@ -6,7 +6,7 @@ const defaultVersionsError = "The buildpack manifest is misconfigured for 'defau
 	"Contact your Cloud Foundry operator/admin. For more information, see " +
 	"https://docs.cloudfoundry.org/buildpacks/custom.html#specifying-default-versions"
 
-func dependencyMissingError(m *manifest, dep Dependency) string {
+func dependencyMissingError(m *Manifest, dep Dependency) string {
 	var msg string
 	otherVersions := m.AllDependencyVersions(dep.Name)
 
@@ -35,9 +35,9 @@ func outdatedDependencyWarning(dep Dependency, newest string) string {
 }
 
 func endOfLifeWarning(depName, versionLine, eolDate, link string) string {
-	warning := "%s %s will no longer be available in new buildpacks released after %s"
+	warning := "%s %s will no longer be available in new buildpacks released after %s."
 	if link != "" {
-		warning += ". See: %s"
+		warning += "\nSee: %s"
 		return fmt.Sprintf(warning, depName, versionLine, eolDate, link)
 	}
 

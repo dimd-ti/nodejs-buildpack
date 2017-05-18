@@ -13,9 +13,8 @@ type Stager struct {
 	CacheDir string
 	DepsDir  string
 	DepsIdx  string
-	Manifest Manifest
-	Log      Logger
-	Command  CommandRunner
+	manifest *Manifest
+	log      Logger
 }
 
 func NewStager(args []string, logger Logger) (*Stager, error) {
@@ -45,9 +44,9 @@ func NewStager(args []string, logger Logger) (*Stager, error) {
 		CacheDir: cacheDir,
 		DepsDir:  depsDir,
 		DepsIdx:  depsIdx,
-		Manifest: manifest,
-		Log:      logger,
-		Command:  NewCommandRunner()}
+		manifest: manifest,
+		log:      logger,
+	}
 
 	return s, nil
 }
@@ -76,8 +75,9 @@ func (s *Stager) WriteConfigYml(config interface{}) error {
 	if config == nil {
 		config = map[interface{}]interface{}{}
 	}
-	data := map[string]interface{}{"name": s.Manifest.Language(), "config": config}
-	return NewYAML().Write(filepath.Join(s.DepDir(), "config.yml"), data)
+	data := map[string]interface{}{"name": s.manifest.Language(), "config": config}
+	y := &YAML{}
+	return y.Write(filepath.Join(s.DepDir(), "config.yml"), data)
 }
 
 func (s *Stager) WriteEnvFile(envVar, envVal string) error {
@@ -132,27 +132,27 @@ func (s *Stager) LinkDirectoryInDepDir(destDir, depSubDir string) error {
 }
 
 func (s *Stager) CheckBuildpackValid() error {
-	version, err := s.Manifest.Version()
+	version, err := s.manifest.Version()
 	if err != nil {
-		s.Log.Error("Could not determine buildpack version: %s", err.Error())
+		s.log.Error("Could not determine buildpack version: %s", err.Error())
 		return err
 	}
 
-	s.Log.BeginStep("%s Buildpack version %s", strings.Title(s.Manifest.Language()), version)
+	s.log.BeginStep("%s Buildpack version %s", strings.Title(s.manifest.Language()), version)
 
-	err = s.Manifest.CheckStackSupport()
+	err = s.manifest.CheckStackSupport()
 	if err != nil {
-		s.Log.Error("Stack not supported by buildpack: %s", err.Error())
+		s.log.Error("Stack not supported by buildpack: %s", err.Error())
 		return err
 	}
 
-	s.Manifest.CheckBuildpackVersion(s.CacheDir)
+	s.manifest.CheckBuildpackVersion(s.CacheDir)
 
 	return nil
 }
 
 func (s *Stager) StagingComplete() {
-	s.Manifest.StoreBuildpackMetadata(s.CacheDir)
+	s.manifest.StoreBuildpackMetadata(s.CacheDir)
 }
 
 func (s *Stager) ClearCache() error {
@@ -200,4 +200,16 @@ func (s *Stager) WriteProfileD(scriptName, scriptContents string) error {
 	}
 
 	return writeToFile(strings.NewReader(scriptContents), filepath.Join(profileDir, scriptName), 0755)
+}
+
+func (s *Stager) Manifest() *Manifest {
+	return s.manifest
+}
+
+func (s *Stager) SetManifest(m *Manifest) {
+	s.manifest = m
+}
+
+func (s *Stager) SetLogger(l Logger) {
+	s.log = l
 }

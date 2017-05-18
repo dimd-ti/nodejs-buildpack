@@ -14,20 +14,6 @@ import (
 const dateFormat = "2006-01-02"
 const thirtyDays = time.Hour * 24 * 30
 
-type Manifest interface {
-	DefaultVersion(depName string) (Dependency, error)
-	FetchDependency(dep Dependency, outputFile string) error
-	InstallDependency(dep Dependency, outputDir string) error
-	Version() (string, error)
-	Language() string
-	CheckStackSupport() error
-	RootDir() string
-	CheckBuildpackVersion(cacheDir string)
-	StoreBuildpackMetadata(cacheDir string)
-	AllDependencyVersions(string) []string
-	InstallOnlyVersion(depName string, installDir string) error
-}
-
 type Dependency struct {
 	Name    string `yaml:"name"`
 	Version string `yaml:"version"`
@@ -47,7 +33,7 @@ type ManifestEntry struct {
 	CFStacks   []string   `yaml:"cf_stacks"`
 }
 
-type manifest struct {
+type Manifest struct {
 	LanguageString  string            `yaml:"language"`
 	DefaultVersions []Dependency      `yaml:"default_versions"`
 	ManifestEntries []ManifestEntry   `yaml:"dependencies"`
@@ -61,10 +47,11 @@ type BuildpackMetadata struct {
 	Version  string `yaml:"version"`
 }
 
-func NewManifest(bpDir string, currentTime time.Time) (Manifest, error) {
-	var m manifest
+func NewManifest(bpDir string, currentTime time.Time) (*Manifest, error) {
+	var m Manifest
+	y := &YAML{}
 
-	err := NewYAML().Load(filepath.Join(bpDir, "manifest.yml"), &m)
+	err := y.Load(filepath.Join(bpDir, "manifest.yml"), &m)
 	if err != nil {
 		return nil, err
 	}
@@ -79,14 +66,15 @@ func NewManifest(bpDir string, currentTime time.Time) (Manifest, error) {
 	return &m, nil
 }
 
-func (m *manifest) RootDir() string {
+func (m *Manifest) RootDir() string {
 	return m.manifestRootDir
 }
 
-func (m *manifest) CheckBuildpackVersion(cacheDir string) {
+func (m *Manifest) CheckBuildpackVersion(cacheDir string) {
 	var md BuildpackMetadata
+	y := &YAML{}
 
-	err := NewYAML().Load(filepath.Join(cacheDir, "BUILDPACK_METADATA"), &md)
+	err := y.Load(filepath.Join(cacheDir, "BUILDPACK_METADATA"), &md)
 	if err != nil {
 		return
 	}
@@ -107,7 +95,7 @@ func (m *manifest) CheckBuildpackVersion(cacheDir string) {
 	return
 }
 
-func (m *manifest) StoreBuildpackMetadata(cacheDir string) {
+func (m *Manifest) StoreBuildpackMetadata(cacheDir string) {
 	logOutput := Log.GetOutput()
 	Log.SetOutput(ioutil.Discard)
 	defer Log.SetOutput(logOutput)
@@ -120,15 +108,16 @@ func (m *manifest) StoreBuildpackMetadata(cacheDir string) {
 	md := BuildpackMetadata{Language: m.Language(), Version: version}
 
 	if exists, _ := FileExists(cacheDir); exists {
-		_ = NewYAML().Write(filepath.Join(cacheDir, "BUILDPACK_METADATA"), &md)
+		y := &YAML{}
+		_ = y.Write(filepath.Join(cacheDir, "BUILDPACK_METADATA"), &md)
 	}
 }
 
-func (m *manifest) Language() string {
+func (m *Manifest) Language() string {
 	return m.LanguageString
 }
 
-func (m *manifest) Version() (string, error) {
+func (m *Manifest) Version() (string, error) {
 	version, err := ioutil.ReadFile(filepath.Join(m.manifestRootDir, "VERSION"))
 	if err != nil {
 		return "", fmt.Errorf("unable to read VERSION file %s", err)
@@ -137,7 +126,7 @@ func (m *manifest) Version() (string, error) {
 	return strings.TrimSpace(string(version)), nil
 }
 
-func (m *manifest) CheckStackSupport() error {
+func (m *Manifest) CheckStackSupport() error {
 	requiredStack := os.Getenv("CF_STACK")
 
 	if len(m.ManifestEntries) == 0 {
@@ -153,7 +142,7 @@ func (m *manifest) CheckStackSupport() error {
 	return fmt.Errorf("required stack %s was not found", requiredStack)
 }
 
-func (m *manifest) DefaultVersion(depName string) (Dependency, error) {
+func (m *Manifest) DefaultVersion(depName string) (Dependency, error) {
 	var defaultVersion Dependency
 	var err error
 	numDefaults := 0
@@ -179,7 +168,7 @@ func (m *manifest) DefaultVersion(depName string) (Dependency, error) {
 	return defaultVersion, nil
 }
 
-func (m *manifest) InstallDependency(dep Dependency, outputDir string) error {
+func (m *Manifest) InstallDependency(dep Dependency, outputDir string) error {
 	Log.BeginStep("Installing %s %s", dep.Name, dep.Version)
 
 	tmpDir, err := ioutil.TempDir("", "downloads")
@@ -220,7 +209,7 @@ func (m *manifest) InstallDependency(dep Dependency, outputDir string) error {
 	return ExtractTarGz(tmpFile, outputDir)
 }
 
-func (m *manifest) warnNewerPatch(dep Dependency) error {
+func (m *Manifest) warnNewerPatch(dep Dependency) error {
 	versions := m.AllDependencyVersions(dep.Name)
 
 	v, err := semver.NewVersion(dep.Version)
@@ -241,7 +230,7 @@ func (m *manifest) warnNewerPatch(dep Dependency) error {
 	return nil
 }
 
-func (m *manifest) warnEndOfLife(dep Dependency) error {
+func (m *Manifest) warnEndOfLife(dep Dependency) error {
 	v, err := semver.NewVersion(dep.Version)
 	if err != nil {
 		return err
@@ -268,7 +257,7 @@ func (m *manifest) warnEndOfLife(dep Dependency) error {
 	return nil
 }
 
-func (m *manifest) FetchDependency(dep Dependency, outputFile string) error {
+func (m *Manifest) FetchDependency(dep Dependency, outputFile string) error {
 	entry, err := m.getEntry(dep)
 	if err != nil {
 		return err
@@ -301,7 +290,7 @@ func (m *manifest) FetchDependency(dep Dependency, outputFile string) error {
 	return nil
 }
 
-func (m *manifest) AllDependencyVersions(depName string) []string {
+func (m *Manifest) AllDependencyVersions(depName string) []string {
 	var depVersions []string
 
 	for _, e := range m.ManifestEntries {
@@ -313,7 +302,7 @@ func (m *manifest) AllDependencyVersions(depName string) []string {
 	return depVersions
 }
 
-func (m *manifest) InstallOnlyVersion(depName string, installDir string) error {
+func (m *Manifest) InstallOnlyVersion(depName string, installDir string) error {
 	depVersions := m.AllDependencyVersions(depName)
 
 	if len(depVersions) > 1 {
@@ -326,7 +315,7 @@ func (m *manifest) InstallOnlyVersion(depName string, installDir string) error {
 	return m.InstallDependency(dep, installDir)
 }
 
-func (m *manifest) getEntry(dep Dependency) (*ManifestEntry, error) {
+func (m *Manifest) getEntry(dep Dependency) (*ManifestEntry, error) {
 	for _, e := range m.ManifestEntries {
 		if e.Dependency == dep {
 			return &e, nil
@@ -337,7 +326,7 @@ func (m *manifest) getEntry(dep Dependency) (*ManifestEntry, error) {
 	return nil, fmt.Errorf("dependency %s %s not found", dep.Name, dep.Version)
 }
 
-func (m *manifest) isCached() bool {
+func (m *Manifest) isCached() bool {
 	dependenciesDir := filepath.Join(m.manifestRootDir, "dependencies")
 
 	isCached, err := FileExists(dependenciesDir)
