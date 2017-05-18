@@ -74,6 +74,8 @@ func Run(f *Finalizer) error {
 		return err
 	}
 
+	f.ListDependencies()
+
 	return nil
 }
 
@@ -198,6 +200,18 @@ func (f *Finalizer) CopyProfileScripts() error {
 		return err
 	}
 	return libbuildpack.CopyDirectory(filepath.Join(f.Manifest.RootDir(), "profile"), profiledDir)
+}
+
+func (f *Finalizer) ListDependencies() {
+	if os.Getenv("NODE_VERBOSE") != "true" {
+		return
+	}
+
+	if f.UseYarn {
+		f.Stager.Command.Execute(f.Stager.BuildDir, os.Stdout, ioutil.Discard, "yarn", "list", "--depth=0")
+	} else {
+		f.Stager.Command.Execute(f.Stager.BuildDir, os.Stdout, ioutil.Discard, "npm", "ls", "--depth=0")
+	}
 }
 
 func (f *Finalizer) runPrebuild(tool string) error {

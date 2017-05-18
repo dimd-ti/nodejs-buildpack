@@ -344,8 +344,10 @@ var _ = Describe("Finalize", func() {
 	})
 
 	Describe("CopyProfileScripts", func() {
+		var buildpackDir string
+
 		BeforeEach(func() {
-			buildpackDir, err := ioutil.TempDir("", "nodejs-buildpack.buildpack.")
+			buildpackDir, err = ioutil.TempDir("", "nodejs-buildpack.buildpack.")
 			Expect(err).To(BeNil())
 			Expect(os.MkdirAll(filepath.Join(buildpackDir, "profile"), 0755)).To(Succeed())
 			Expect(ioutil.WriteFile(filepath.Join(buildpackDir, "profile", "test.sh"), []byte("Random Text"), 0755)).To(Succeed())
@@ -353,10 +355,72 @@ var _ = Describe("Finalize", func() {
 			mockManifest.EXPECT().RootDir().Return(buildpackDir)
 		})
 
+		AfterEach(func() {
+			Expect(os.RemoveAll(buildpackDir)).To(Succeed())
+		})
+
 		It("Copies scripts from <buildpack_dir>/profile to <dep_dir>/profile.d", func() {
 			Expect(finalizer.CopyProfileScripts()).To(Succeed())
 			Expect(ioutil.ReadFile(filepath.Join(depsDir, depsIdx, "profile.d", "test.sh"))).To(Equal([]byte("Random Text")))
 			Expect(ioutil.ReadFile(filepath.Join(depsDir, depsIdx, "profile.d", "other.sh"))).To(Equal([]byte("more Text")))
+		})
+	})
+
+	Describe("CopyProfileScripts", func() {
+		var oldNodeVerbose string
+
+		BeforeEach(func() {
+			oldNodeVerbose = os.Getenv("NODE_VERBOSE")
+		})
+
+		AfterEach(func() {
+			Expect(os.Setenv("NODE_VERBOSE", oldNodeVerbose)).To(Succeed())
+		})
+
+		Context("package manager is yarn", func() {
+			BeforeEach(func() {
+				finalizer.UseYarn = true
+			})
+
+			Context("NODE_VERBOSE is true", func() {
+				BeforeEach(func() {
+					Expect(os.Setenv("NODE_VERBOSE", "true")).To(Succeed())
+				})
+
+				It("lists the installed packages", func() {
+					mockCommandRunner.EXPECT().Execute(buildDir, gomock.Any(), ioutil.Discard, "yarn", "list", "--depth=0").Return(nil)
+					finalizer.ListDependencies()
+				})
+			})
+
+			Context("NODE_VERBOSE is not true", func() {
+				It("does not list the installed packages", func() {
+					finalizer.ListDependencies()
+				})
+			})
+		})
+
+		Context("package manager is npm", func() {
+			BeforeEach(func() {
+				finalizer.UseYarn = false
+			})
+
+			Context("NODE_VERBOSE is true", func() {
+				BeforeEach(func() {
+					Expect(os.Setenv("NODE_VERBOSE", "true")).To(Succeed())
+				})
+
+				It("lists the installed packages", func() {
+					mockCommandRunner.EXPECT().Execute(buildDir, gomock.Any(), ioutil.Discard, "npm", "ls", "--depth=0").Return(nil)
+					finalizer.ListDependencies()
+				})
+			})
+
+			Context("NODE_VERBOSE is not true", func() {
+				It("does not list the installed packages", func() {
+					finalizer.ListDependencies()
+				})
+			})
 		})
 	})
 })
