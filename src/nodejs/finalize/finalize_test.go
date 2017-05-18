@@ -443,4 +443,47 @@ var _ = Describe("Finalize", func() {
 			})
 		})
 	})
+
+	Describe("WarnNoStart", func() {
+		Context("Procfile exists", func() {
+			BeforeEach(func() {
+				Expect(ioutil.WriteFile(filepath.Join(buildDir, "Procfile"), []byte("xxx"), 0644)).To(Succeed())
+			})
+
+			It("Doesn't log a warning", func() {
+				Expect(finalizer.WarnNoStart()).To(Succeed())
+				Expect(buffer.String()).To(Equal(""))
+			})
+		})
+
+		Context("StartScript exists", func() {
+			BeforeEach(func() {
+				finalizer.StartScript = "npm run"
+			})
+
+			It("Doesn't log a warning", func() {
+				Expect(finalizer.WarnNoStart()).To(Succeed())
+				Expect(buffer.String()).To(Equal(""))
+			})
+		})
+
+		Context("server.js exists", func() {
+			BeforeEach(func() {
+				Expect(ioutil.WriteFile(filepath.Join(buildDir, "server.js"), []byte("xxx"), 0644)).To(Succeed())
+			})
+
+			It("Doesn't log a warning", func() {
+				Expect(finalizer.WarnNoStart()).To(Succeed())
+				Expect(buffer.String()).To(Equal(""))
+			})
+		})
+
+		Context("none of the above exists", func() {
+			It("logs a warning", func() {
+				Expect(finalizer.WarnNoStart()).To(Succeed())
+				Expect(buffer.String()).To(ContainSubstring("**WARNING** This app may not specify any way to start a node process\n"))
+				Expect(buffer.String()).To(ContainSubstring("See: https://docs.cloudfoundry.org/buildpacks/node/node-tips.html#start"))
+			})
+		})
+	})
 })

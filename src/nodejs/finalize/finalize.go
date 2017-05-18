@@ -77,6 +77,11 @@ func Run(f *Finalizer) error {
 
 	f.ListDependencies()
 
+	if err := f.WarnNoStart(); err != nil {
+		f.Stager.Log.Error(err.Error())
+		return err
+	}
+
 	return nil
 }
 
@@ -215,6 +220,25 @@ func (f *Finalizer) ListDependencies() {
 	} else {
 		f.Stager.Command.Execute(f.Stager.BuildDir, os.Stdout, ioutil.Discard, "npm", "ls", "--depth=0")
 	}
+}
+
+func (f *Finalizer) WarnNoStart() error {
+	procfileExists, err := libbuildpack.FileExists(filepath.Join(f.Stager.BuildDir, "Procfile"))
+	if err != nil {
+		return err
+	}
+	serverJsExists, err := libbuildpack.FileExists(filepath.Join(f.Stager.BuildDir, "server.js"))
+	if err != nil {
+		return err
+	}
+
+	if !procfileExists && !serverJsExists && f.StartScript == "" {
+		warning := "This app may not specify any way to start a node process\n"
+		warning += "See: https://docs.cloudfoundry.org/buildpacks/node/node-tips.html#start"
+		f.Stager.Log.Warning(warning)
+	}
+
+	return nil
 }
 
 func (f *Finalizer) runPrebuild(tool string) error {
