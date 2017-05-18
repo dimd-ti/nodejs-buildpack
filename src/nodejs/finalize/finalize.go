@@ -24,15 +24,16 @@ type Manifest interface {
 }
 
 type Finalizer struct {
-	Stager     *libbuildpack.Stager
-	CacheDirs  []string
-	PreBuild   string
-	PostBuild  string
-	NPM        NPM
-	NPMRebuild bool
-	Yarn       Yarn
-	UseYarn    bool
-	Manifest   Manifest
+	Stager      *libbuildpack.Stager
+	CacheDirs   []string
+	PreBuild    string
+	PostBuild   string
+	NPM         NPM
+	NPMRebuild  bool
+	Yarn        Yarn
+	UseYarn     bool
+	Manifest    Manifest
+	StartScript string
 }
 
 func Run(f *Finalizer) error {
@@ -85,8 +86,9 @@ func (f *Finalizer) ReadPackageJSON() error {
 		CacheDirs1 []string `json:"cacheDirectories"`
 		CacheDirs2 []string `json:"cache_directories"`
 		Scripts    struct {
-			PreBuild  string `json:"heroku-prebuild"`
-			PostBuild string `json:"heroku-postbuild"`
+			PreBuild    string `json:"heroku-prebuild"`
+			PostBuild   string `json:"heroku-postbuild"`
+			StartScript string `json:"start"`
 		} `json:"scripts"`
 	}
 
@@ -116,6 +118,7 @@ func (f *Finalizer) ReadPackageJSON() error {
 	}
 	f.PreBuild = p.Scripts.PreBuild
 	f.PostBuild = p.Scripts.PostBuild
+	f.StartScript = p.Scripts.StartScript
 
 	return nil
 }

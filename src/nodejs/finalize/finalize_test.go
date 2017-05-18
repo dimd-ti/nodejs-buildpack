@@ -195,6 +195,26 @@ var _ = Describe("Finalize", func() {
 			})
 		})
 
+		Context("package.json has start script", func() {
+			BeforeEach(func() {
+				packageJSON := `
+{
+  "scripts" : {
+		"script": "script",
+		"start": "start-my-app",
+		"thing": "thing"
+	}
+}
+`
+				Expect(ioutil.WriteFile(filepath.Join(buildDir, "package.json"), []byte(packageJSON), 0644)).To(Succeed())
+			})
+
+			It("sets StartScript", func() {
+				Expect(finalizer.ReadPackageJSON()).To(Succeed())
+				Expect(finalizer.StartScript).To(Equal("start-my-app"))
+			})
+		})
+
 		Context("package.json does not exist", func() {
 			It("warns user", func() {
 				Expect(finalizer.ReadPackageJSON()).To(Succeed())
