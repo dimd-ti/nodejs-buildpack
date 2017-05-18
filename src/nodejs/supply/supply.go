@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -12,11 +13,31 @@ import (
 	"github.com/cloudfoundry/libbuildpack"
 )
 
+type Command interface {
+	Execute(string, io.Writer, io.Writer, string, ...string)
+}
+
+type Manifest interface {
+	AllDependencyVersions(string) []string
+	DefaultVersion(string) (libbuildpack.Dependency, error)
+	InstallDependency(libbuildpack.Dependency, string) error
+	InstallOnlyVersion(string, string) error
+}
+
+type Logger interface {
+}
+
+type Stager interface {
+}
+
 type Supplier struct {
-	Stager *libbuildpack.Stager
-	Node   string
-	Yarn   string
-	NPM    string
+	Stager   Stager
+	Manifest Manifest
+	Log      Logger
+	Command  Command
+	Node     string
+	Yarn     string
+	NPM      string
 }
 
 type packageJSON struct {
@@ -31,31 +52,31 @@ type engines struct {
 }
 
 func Run(s *Supplier) error {
-	s.Stager.Log.BeginStep("Installing binaries")
+	s.Log.BeginStep("Installing binaries")
 	if err := s.LoadPackageJSON(); err != nil {
-		s.Stager.Log.Error("Unable to load package.json: %s", err.Error())
+		s.Log.Error("Unable to load package.json: %s", err.Error())
 		return err
 	}
 
 	s.WarnNodeEngine()
 
 	if err := s.InstallNode("/tmp/node"); err != nil {
-		s.Stager.Log.Error("Unable to install node: %s", err.Error())
+		s.Log.Error("Unable to install node: %s", err.Error())
 		return err
 	}
 
 	if err := s.InstallNPM(); err != nil {
-		s.Stager.Log.Error("Unable to install npm: %s", err.Error())
+		s.Log.Error("Unable to install npm: %s", err.Error())
 		return err
 	}
 
 	if err := s.InstallYarn(); err != nil {
-		s.Stager.Log.Error("Unable to install yarn: %s", err.Error())
+		s.Log.Error("Unable to install yarn: %s", err.Error())
 		return err
 	}
 
 	if err := s.CreateDefaultEnv(); err != nil {
-		s.Stager.Log.Error("Unable to setup default environment: %s", err.Error())
+		s.Log.Error("Unable to setup default environment: %s", err.Error())
 		return err
 	}
 
@@ -64,8 +85,9 @@ func Run(s *Supplier) error {
 
 func (s *Supplier) LoadPackageJSON() error {
 	var p packageJSON
+	j := &libbuildpack.JSON{}
 
-	err := libbuildpack.NewJSON().Load(filepath.Join(s.Stager.BuildDir, "package.json"), &p)
+	err := j.Load(filepath.Join(s.Stager.BuildDir, "package.json"), &p)
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -75,15 +97,15 @@ func (s *Supplier) LoadPackageJSON() error {
 	}
 
 	if p.Engines.Node != "" {
-		s.Stager.Log.Info("engines.node (package.json): %s", p.Engines.Node)
+		s.Log.Info("engines.node (package.json): %s", p.Engines.Node)
 	} else {
-		s.Stager.Log.Info("engines.node (package.json): unspecified")
+		s.Log.Info("engines.node (package.json): unspecified")
 	}
 
 	if p.Engines.NPM != "" {
-		s.Stager.Log.Info("engines.npm (package.json): %s", p.Engines.NPM)
+		s.Log.Info("engines.npm (package.json): %s", p.Engines.NPM)
 	} else {
-		s.Stager.Log.Info("engines.npm (package.json): unspecified (use default)")
+		s.Log.Info("engines.npm (package.json): unspecified (use default)")
 	}
 
 	s.Node = p.Engines.Node
@@ -97,13 +119,13 @@ func (s *Supplier) WarnNodeEngine() {
 	docsLink := "http://docs.cloudfoundry.org/buildpacks/node/node-tips.html"
 
 	if s.Node == "" {
-		s.Stager.Log.Warning("Node version not specified in package.json. See: %s", docsLink)
+		s.Log.Warning("Node version not specified in package.json. See: %s", docsLink)
 	}
 	if s.Node == "*" {
-		s.Stager.Log.Warning("Dangerous semver range (*) in engines.node. See: %s", docsLink)
+		s.Log.Warning("Dangerous semver range (*) in engines.node. See: %s", docsLink)
 	}
 	if strings.HasPrefix(s.Node, ">") {
-		s.Stager.Log.Warning("Dangerous semver range (>) in engines.node. See: %s", docsLink)
+		s.Log.Warning("Dangerous semver range (>) in engines.node. See: %s", docsLink)
 	}
 	return
 }
@@ -114,7 +136,7 @@ func (s *Supplier) InstallNode(tempDir string) error {
 	nodeInstallDir := filepath.Join(s.Stager.DepDir(), "node")
 
 	if s.Node != "" {
-		versions := s.Stager.Manifest.AllDependencyVersions("node")
+		versions := s.Manifest.AllDependencyVersions("node")
 		ver, err := libbuildpack.FindMatchingVersion(s.Node, versions)
 		if err != nil {
 			return err
@@ -124,13 +146,13 @@ func (s *Supplier) InstallNode(tempDir string) error {
 	} else {
 		var err error
 
-		dep, err = s.Stager.Manifest.DefaultVersion("node")
+		dep, err = s.Manifest.DefaultVersion("node")
 		if err != nil {
 			return err
 		}
 	}
 
-	if err := s.Stager.Manifest.InstallDependency(dep, tempDir); err != nil {
+	if err := s.Manifest.InstallDependency(dep, tempDir); err != nil {
 		return err
 	}
 
@@ -154,18 +176,18 @@ func (s *Supplier) InstallNPM() error {
 	npmVersion := strings.TrimSpace(buffer.String())
 
 	if s.NPM == "" {
-		s.Stager.Log.Info("Using default npm version: %s", npmVersion)
+		s.Log.Info("Using default npm version: %s", npmVersion)
 		return nil
 	}
 	if s.NPM == npmVersion {
-		s.Stager.Log.Info("npm %s already installed with node", npmVersion)
+		s.Log.Info("npm %s already installed with node", npmVersion)
 		return nil
 	}
 
-	s.Stager.Log.Info("Downloading and installing npm %s (replacing version %s)...", s.NPM, npmVersion)
+	s.Log.Info("Downloading and installing npm %s (replacing version %s)...", s.NPM, npmVersion)
 
 	if err := s.Stager.Command.Execute(s.Stager.BuildDir, ioutil.Discard, ioutil.Discard, "npm", "install", "--unsafe-perm", "--quiet", "-g", "npm@"+s.NPM); err != nil {
-		s.Stager.Log.Error("We're unable to download the version of npm you've provided (%s).\nPlease remove the npm version specification in package.json", s.NPM)
+		s.Log.Error("We're unable to download the version of npm you've provided (%s).\nPlease remove the npm version specification in package.json", s.NPM)
 		return err
 	}
 	return nil
@@ -173,7 +195,7 @@ func (s *Supplier) InstallNPM() error {
 
 func (s *Supplier) InstallYarn() error {
 	if s.Yarn != "" {
-		versions := s.Stager.Manifest.AllDependencyVersions("yarn")
+		versions := s.Manifest.AllDependencyVersions("yarn")
 		_, err := libbuildpack.FindMatchingVersion(s.Yarn, versions)
 		if err != nil {
 			return fmt.Errorf("package.json requested %s, buildpack only includes yarn version %s", s.Yarn, strings.Join(versions, ", "))
@@ -182,7 +204,7 @@ func (s *Supplier) InstallYarn() error {
 
 	yarnInstallDir := filepath.Join(s.Stager.DepDir(), "yarn")
 
-	if err := s.Stager.Manifest.InstallOnlyVersion("yarn", yarnInstallDir); err != nil {
+	if err := s.Manifest.InstallOnlyVersion("yarn", yarnInstallDir); err != nil {
 		return err
 	}
 
@@ -196,7 +218,7 @@ func (s *Supplier) InstallYarn() error {
 	}
 
 	yarnVersion := strings.TrimSpace(buffer.String())
-	s.Stager.Log.Info("Installed yarn %s", yarnVersion)
+	s.Log.Info("Installed yarn %s", yarnVersion)
 
 	return nil
 }
@@ -210,7 +232,7 @@ func (s *Supplier) CreateDefaultEnv() error {
 		"NODE_VERBOSE":          "false",
 	}
 
-	s.Stager.Log.BeginStep("Creating runtime environment")
+	s.Log.BeginStep("Creating runtime environment")
 
 	for envVar, envDefault := range environmentDefaults {
 		if os.Getenv(envVar) == "" {

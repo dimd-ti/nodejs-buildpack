@@ -17,8 +17,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-//go:generate mockgen -source=../vendor/github.com/cloudfoundry/libbuildpack/manifest.go --destination=mocks_manifest_test.go --package=supply_test --imports=.=github.com/cloudfoundry/libbuildpack
-//go:generate mockgen -source=../vendor/github.com/cloudfoundry/libbuildpack/command_runner.go --destination=mocks_command_runner_test.go --package=supply_test
+//go:generate mockgen -source=supply.go --destination=mocks_test.go --package=supply_test
 
 var _ = Describe("Supply", func() {
 	var (
