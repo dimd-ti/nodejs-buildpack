@@ -18,7 +18,7 @@ describe 'CF NodeJS Buildpack' do
 
     it 'resolves to a nodeJS version successfully' do
       expect(app).to be_running
-      expect(app).to have_logged /Downloading and installing node 4\.\d+\.\d+/
+      expect(app).to have_logged /Installing node 4\.\d+\.\d+/
 
       browser.visit_path('/')
       expect(browser).to have_body('Hello, World!')
@@ -30,14 +30,10 @@ describe 'CF NodeJS Buildpack' do
 
     it 'resolves to a nodeJS version successfully' do
       expect(app).to be_running
-      expect(app).to have_logged /Downloading and installing node 6\.\d+\.\d+/
+      expect(app).to have_logged /Installing node 6\.\d+\.\d+/
 
       browser.visit_path('/')
       expect(browser).to have_body('Hello, World!')
-    end
-
-    it 'does not log a jq error' do
-      expect(app).not_to have_logged /error: Invalid character/
     end
 
     context 'running a task' do
@@ -57,7 +53,7 @@ describe 'CF NodeJS Buildpack' do
 
     it 'resolves to the stable nodeJS version successfully' do
       expect(app).to be_running
-      expect(app).to have_logged /Downloading and installing node 4\.\d+\.\d+/
+      expect(app).to have_logged /Installing node 4\.\d+\.\d+/
 
       browser.visit_path('/')
       expect(browser).to have_body('Hello, World!')
@@ -73,7 +69,7 @@ describe 'CF NodeJS Buildpack' do
 
     it 'displays a nice error messages and gracefully fails' do
       expect(app).to_not be_running
-      expect(app).to have_logged 'Downloading and installing node 9000.0.0'
+      expect(app).to have_logged 'Installing node 9000.0.0'
       expect(app).to_not have_logged 'Downloaded ['
       expect(app).to have_logged /DEPENDENCY MISSING IN MANIFEST: node 9000\.0\.0.*-----> Build failed/m
     end
@@ -84,7 +80,7 @@ describe 'CF NodeJS Buildpack' do
 
     it 'displays a nice error messages and gracefully fails' do
       expect(app).to_not be_running
-      expect(app).to have_logged 'Downloading and installing node 4.1.1'
+      expect(app).to have_logged 'Installing node 4.1.1'
       expect(app).to_not have_logged 'Downloaded ['
       expect(app).to have_logged /DEPENDENCY MISSING IN MANIFEST: node 4\.1\.1.*-----> Build failed/m
     end
@@ -124,7 +120,7 @@ describe 'CF NodeJS Buildpack' do
     let(:app_name) { 'with_yarn' }
 
     it 'successfully deploys and vendors the dependencies via yarn', :uncached do
-      expect(app).to have_logged("Downloading and installing yarn")
+      expect(app).to have_logged("Running yarn in online mode")
       expect(app).to be_running
       expect(Dir).to_not exist("cf_spec/fixtures/#{app_name}/node_modules")
       expect(app).to have_file '/app/node_modules'
@@ -142,7 +138,7 @@ describe 'CF NodeJS Buildpack' do
     let(:app_name) { 'with_yarn_vendored' }
 
     it 'deploys without hitting the internet', :cached do
-      expect(app).to have_logged("Downloading and installing yarn")
+      expect(app).to have_logged("Running yarn in offline mode")
       expect(app).to be_running
       expect(app).not_to have_internet_traffic
 
