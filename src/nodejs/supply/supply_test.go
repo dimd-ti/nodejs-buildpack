@@ -2,6 +2,7 @@ package supply_test
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"nodejs/supply"
@@ -58,14 +59,15 @@ var _ = Describe("Supply", func() {
 		mockManifest = NewMockManifest(mockCtrl)
 		mockCommandRunner = NewMockCommandRunner(mockCtrl)
 
-		installNode = func(_ libbuildpack.Dependency, nodeDir string) {
-			err := os.MkdirAll(filepath.Join(nodeDir, "bin"), 0755)
+		installNode = func(dep libbuildpack.Dependency, nodeDir string) {
+			subDir := fmt.Sprintf("node-v%s-linux-x64", dep.Version)
+			err := os.MkdirAll(filepath.Join(nodeDir, subDir, "bin"), 0755)
 			Expect(err).To(BeNil())
 
-			err = ioutil.WriteFile(filepath.Join(nodeDir, "bin", "node"), []byte("node exe"), 0644)
+			err = ioutil.WriteFile(filepath.Join(nodeDir, subDir, "bin", "node"), []byte("node exe"), 0644)
 			Expect(err).To(BeNil())
 
-			err = ioutil.WriteFile(filepath.Join(nodeDir, "bin", "npm"), []byte("npm exe"), 0644)
+			err = ioutil.WriteFile(filepath.Join(nodeDir, subDir, "bin", "npm"), []byte("npm exe"), 0644)
 			Expect(err).To(BeNil())
 		}
 
@@ -281,9 +283,16 @@ var _ = Describe("Supply", func() {
 
 	Describe("InstallNode", func() {
 		var nodeInstallDir string
+		var nodeTmpDir string
 
 		BeforeEach(func() {
 			nodeInstallDir = filepath.Join(depsDir, depsIdx, "node")
+			nodeTmpDir, err = ioutil.TempDir("", "nodejs-buildpack.temp")
+			Expect(err).To(BeNil())
+		})
+
+		AfterEach(func() {
+			Expect(os.RemoveAll(nodeTmpDir)).To(Succeed())
 		})
 
 		Context("node version use semver", func() {
@@ -294,19 +303,19 @@ var _ = Describe("Supply", func() {
 
 			It("installs the correct version from the manifest", func() {
 				dep := libbuildpack.Dependency{Name: "node", Version: "4.8.3"}
-				mockManifest.EXPECT().InstallDependency(dep, nodeInstallDir).Do(installNode).Return(nil)
+				mockManifest.EXPECT().InstallDependency(dep, nodeTmpDir).Do(installNode).Return(nil)
 
 				supplier.Node = "~>4"
-				err = supplier.InstallNode()
+				err = supplier.InstallNode(nodeTmpDir)
 				Expect(err).To(BeNil())
 			})
 
 			It("creates a symlink in <depDir>/bin", func() {
 				dep := libbuildpack.Dependency{Name: "node", Version: "6.10.2"}
-				mockManifest.EXPECT().InstallDependency(dep, nodeInstallDir).Do(installNode).Return(nil)
+				mockManifest.EXPECT().InstallDependency(dep, nodeTmpDir).Do(installNode).Return(nil)
 
 				supplier.Node = "6.10.*"
-				err = supplier.InstallNode()
+				err = supplier.InstallNode(nodeTmpDir)
 				Expect(err).To(BeNil())
 
 				link, err := os.Readlink(filepath.Join(depsDir, depsIdx, "bin", "node"))
@@ -325,11 +334,11 @@ var _ = Describe("Supply", func() {
 			It("installs the default version from the manifest", func() {
 				dep := libbuildpack.Dependency{Name: "node", Version: "6.10.2"}
 				mockManifest.EXPECT().DefaultVersion("node").Return(dep, nil)
-				mockManifest.EXPECT().InstallDependency(dep, nodeInstallDir).Do(installNode).Return(nil)
+				mockManifest.EXPECT().InstallDependency(dep, nodeTmpDir).Do(installNode).Return(nil)
 
 				supplier.Node = ""
 
-				err = supplier.InstallNode()
+				err = supplier.InstallNode(nodeTmpDir)
 				Expect(err).To(BeNil())
 			})
 		})

@@ -39,7 +39,7 @@ func Run(s *Supplier) error {
 
 	s.WarnNodeEngine()
 
-	if err := s.InstallNode(); err != nil {
+	if err := s.InstallNode("/tmp/node"); err != nil {
 		s.Stager.Log.Error("Unable to install node: %s", err.Error())
 		return err
 	}
@@ -108,7 +108,7 @@ func (s *Supplier) WarnNodeEngine() {
 	return
 }
 
-func (s *Supplier) InstallNode() error {
+func (s *Supplier) InstallNode(tempDir string) error {
 	var dep libbuildpack.Dependency
 
 	nodeInstallDir := filepath.Join(s.Stager.DepDir(), "node")
@@ -130,10 +130,19 @@ func (s *Supplier) InstallNode() error {
 		}
 	}
 
-	if err := s.Stager.Manifest.InstallDependency(dep, nodeInstallDir); err != nil {
+	if err := s.Stager.Manifest.InstallDependency(dep, tempDir); err != nil {
 		return err
 	}
-	return s.Stager.LinkDirectoryInDepDir(filepath.Join(nodeInstallDir, "bin"), "bin")
+
+	if err := os.Rename(filepath.Join(tempDir, fmt.Sprintf("node-v%s-linux-x64", dep.Version)), nodeInstallDir); err != nil {
+		return err
+	}
+
+	if err := s.Stager.LinkDirectoryInDepDir(filepath.Join(nodeInstallDir, "bin"), "bin"); err != nil {
+		return err
+	}
+
+	return os.Setenv("PATH", fmt.Sprintf("%s:%s", os.Getenv("PATH"), filepath.Join(s.Stager.DepDir(), "bin")))
 }
 
 func (s *Supplier) InstallNPM() error {
