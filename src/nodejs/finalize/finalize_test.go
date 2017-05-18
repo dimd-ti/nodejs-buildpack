@@ -23,6 +23,8 @@ var _ = Describe("Finalize", func() {
 	var (
 		err               error
 		buildDir          string
+		depsDir           string
+		depsIdx           string
 		finalizer         *finalize.Finalizer
 		logger            libbuildpack.Logger
 		buffer            *bytes.Buffer
@@ -30,11 +32,18 @@ var _ = Describe("Finalize", func() {
 		mockCommandRunner *MockCommandRunner
 		mockYarn          *MockYarn
 		mockNPM           *MockNPM
+		mockManifest      *MockManifest
 	)
 
 	BeforeEach(func() {
 		buildDir, err = ioutil.TempDir("", "nodejs-buildpack.build.")
 		Expect(err).To(BeNil())
+
+		depsDir, err = ioutil.TempDir("", "nodejs-buildpack.deps.")
+		Expect(err).To(BeNil())
+
+		depsIdx = "9"
+		Expect(os.MkdirAll(filepath.Join(depsDir, depsIdx), 0755)).To(Succeed())
 
 		buffer = new(bytes.Buffer)
 
@@ -45,17 +54,21 @@ var _ = Describe("Finalize", func() {
 		mockCommandRunner = NewMockCommandRunner(mockCtrl)
 		mockYarn = NewMockYarn(mockCtrl)
 		mockNPM = NewMockNPM(mockCtrl)
+		mockManifest = NewMockManifest(mockCtrl)
 
 		bps := &libbuildpack.Stager{
 			BuildDir: buildDir,
+			DepsDir:  depsDir,
+			DepsIdx:  depsIdx,
 			Log:      logger,
 			Command:  mockCommandRunner,
 		}
 
 		finalizer = &finalize.Finalizer{
-			Stager: bps,
-			Yarn:   mockYarn,
-			NPM:    mockNPM,
+			Stager:   bps,
+			Yarn:     mockYarn,
+			NPM:      mockNPM,
+			Manifest: mockManifest,
 		}
 	})
 
@@ -63,6 +76,9 @@ var _ = Describe("Finalize", func() {
 		mockCtrl.Finish()
 
 		err = os.RemoveAll(buildDir)
+		Expect(err).To(BeNil())
+
+		err = os.RemoveAll(depsDir)
 		Expect(err).To(BeNil())
 	})
 
@@ -324,6 +340,23 @@ var _ = Describe("Finalize", func() {
 					Expect(buffer.String()).To(ContainSubstring("Running descriptive (npm)"))
 				})
 			})
+		})
+	})
+
+	Describe("CopyProfileScripts", func() {
+		BeforeEach(func() {
+			buildpackDir, err := ioutil.TempDir("", "nodejs-buildpack.buildpack.")
+			Expect(err).To(BeNil())
+			Expect(os.MkdirAll(filepath.Join(buildpackDir, "profile"), 0755)).To(Succeed())
+			Expect(ioutil.WriteFile(filepath.Join(buildpackDir, "profile", "test.sh"), []byte("Random Text"), 0755)).To(Succeed())
+			Expect(ioutil.WriteFile(filepath.Join(buildpackDir, "profile", "other.sh"), []byte("more Text"), 0755)).To(Succeed())
+			mockManifest.EXPECT().RootDir().Return(buildpackDir)
+		})
+
+		It("Copies scripts from <buildpack_dir>/profile to <dep_dir>/profile.d", func() {
+			Expect(finalizer.CopyProfileScripts()).To(Succeed())
+			Expect(ioutil.ReadFile(filepath.Join(depsDir, depsIdx, "profile.d", "test.sh"))).To(Equal([]byte("Random Text")))
+			Expect(ioutil.ReadFile(filepath.Join(depsDir, depsIdx, "profile.d", "other.sh"))).To(Equal([]byte("more Text")))
 		})
 	})
 })

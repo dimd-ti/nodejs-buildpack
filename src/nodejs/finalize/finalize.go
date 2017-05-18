@@ -19,6 +19,10 @@ type NPM interface {
 	Rebuild() error
 }
 
+type Manifest interface {
+	RootDir() string
+}
+
 type Finalizer struct {
 	Stager     *libbuildpack.Stager
 	CacheDirs  []string
@@ -28,6 +32,7 @@ type Finalizer struct {
 	NPMRebuild bool
 	Yarn       Yarn
 	UseYarn    bool
+	Manifest   Manifest
 }
 
 func Run(f *Finalizer) error {
@@ -61,6 +66,11 @@ func Run(f *Finalizer) error {
 
 	if err := cacher.Save(); err != nil {
 		f.Stager.Log.Error("Unable to save cache: %s", err.Error())
+		return err
+	}
+
+	if err := f.CopyProfileScripts(); err != nil {
+		f.Stager.Log.Error("Unable to copy profile.d scripts: %s", err.Error())
 		return err
 	}
 
@@ -180,6 +190,14 @@ func (f *Finalizer) BuildDependencies() error {
 	}
 
 	return nil
+}
+
+func (f *Finalizer) CopyProfileScripts() error {
+	profiledDir := filepath.Join(f.Stager.DepDir(), "profile.d")
+	if err := os.MkdirAll(profiledDir, 0755); err != nil {
+		return err
+	}
+	return libbuildpack.CopyDirectory(filepath.Join(f.Manifest.RootDir(), "profile"), profiledDir)
 }
 
 func (f *Finalizer) runPrebuild(tool string) error {

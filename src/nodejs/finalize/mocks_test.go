@@ -78,3 +78,34 @@ func (_m *MockNPM) Rebuild() error {
 func (_mr *_MockNPMRecorder) Rebuild() *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Rebuild")
 }
+
+// Mock of Manifest interface
+type MockManifest struct {
+	ctrl     *gomock.Controller
+	recorder *_MockManifestRecorder
+}
+
+// Recorder for MockManifest (not exported)
+type _MockManifestRecorder struct {
+	mock *MockManifest
+}
+
+func NewMockManifest(ctrl *gomock.Controller) *MockManifest {
+	mock := &MockManifest{ctrl: ctrl}
+	mock.recorder = &_MockManifestRecorder{mock}
+	return mock
+}
+
+func (_m *MockManifest) EXPECT() *_MockManifestRecorder {
+	return _m.recorder
+}
+
+func (_m *MockManifest) RootDir() string {
+	ret := _m.ctrl.Call(_m, "RootDir")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+func (_mr *_MockManifestRecorder) RootDir() *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "RootDir")
+}

@@ -26,13 +26,14 @@ func main() {
 		Yarn: &yarn.Yarn{
 			BuildDir: stager.BuildDir,
 			Command:  stager.Command,
-			Logger:   stager.Logger,
+			Logger:   stager.Log,
 		},
 		NPM: &npm.NPM{
 			BuildDir: stager.BuildDir,
 			Command:  stager.Command,
-			Logger:   stager.Logger,
+			Logger:   stager.Log,
 		},
+		Manifest: stager.Manifest,
 	}
 
 	if err := finalize.Run(&f); err != nil {
