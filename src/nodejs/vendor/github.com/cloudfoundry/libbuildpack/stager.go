@@ -5,31 +5,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 type Stager struct {
-	BuildDir string
-	CacheDir string
-	DepsDir  string
-	DepsIdx  string
+	buildDir string
+	cacheDir string
+	depsDir  string
+	depsIdx  string
 	manifest *Manifest
 	log      Logger
 }
 
-func NewStager(args []string, logger Logger) (*Stager, error) {
-	bpDir, err := GetBuildpackDir()
-	if err != nil {
-		logger.Error("Unable to determine buildpack directory: %s", err.Error())
-		return nil, err
-	}
-
-	manifest, err := NewManifest(bpDir, time.Now())
-	if err != nil {
-		logger.Error("Unable to load buildpack manifest: %s", err.Error())
-		return nil, err
-	}
-
+func NewStager(args []string, logger Logger, manifest *Manifest) *Stager {
 	buildDir := args[0]
 	cacheDir := args[1]
 	depsDir := ""
@@ -40,35 +27,19 @@ func NewStager(args []string, logger Logger) (*Stager, error) {
 		depsIdx = args[3]
 	}
 
-	s := &Stager{BuildDir: buildDir,
-		CacheDir: cacheDir,
-		DepsDir:  depsDir,
-		DepsIdx:  depsIdx,
+	s := &Stager{buildDir: buildDir,
+		cacheDir: cacheDir,
+		depsDir:  depsDir,
+		depsIdx:  depsIdx,
 		manifest: manifest,
 		log:      logger,
 	}
 
-	return s, nil
-}
-
-func GetBuildpackDir() (string, error) {
-	var err error
-
-	bpDir := os.Getenv("BUILDPACK_DIR")
-
-	if bpDir == "" {
-		bpDir, err = filepath.Abs(filepath.Join(filepath.Dir(os.Args[0]), ".."))
-
-		if err != nil {
-			return "", err
-		}
-	}
-
-	return bpDir, nil
+	return s
 }
 
 func (s *Stager) DepDir() string {
-	return filepath.Join(s.DepsDir, s.DepsIdx)
+	return filepath.Join(s.depsDir, s.depsIdx)
 }
 
 func (s *Stager) WriteConfigYml(config interface{}) error {
@@ -146,17 +117,17 @@ func (s *Stager) CheckBuildpackValid() error {
 		return err
 	}
 
-	s.manifest.CheckBuildpackVersion(s.CacheDir)
+	s.manifest.CheckBuildpackVersion(s.cacheDir)
 
 	return nil
 }
 
 func (s *Stager) StagingComplete() {
-	s.manifest.StoreBuildpackMetadata(s.CacheDir)
+	s.manifest.StoreBuildpackMetadata(s.cacheDir)
 }
 
 func (s *Stager) ClearCache() error {
-	files, err := ioutil.ReadDir(s.CacheDir)
+	files, err := ioutil.ReadDir(s.cacheDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -165,7 +136,7 @@ func (s *Stager) ClearCache() error {
 	}
 
 	for _, file := range files {
-		err = os.RemoveAll(filepath.Join(s.CacheDir, file.Name()))
+		err = os.RemoveAll(filepath.Join(s.cacheDir, file.Name()))
 		if err != nil {
 			return err
 		}
@@ -202,14 +173,14 @@ func (s *Stager) WriteProfileD(scriptName, scriptContents string) error {
 	return writeToFile(strings.NewReader(scriptContents), filepath.Join(profileDir, scriptName), 0755)
 }
 
-func (s *Stager) Manifest() *Manifest {
-	return s.manifest
+func (s *Stager) BuildDir() string {
+	return s.buildDir
 }
 
-func (s *Stager) SetManifest(m *Manifest) {
-	s.manifest = m
+func (s *Stager) CacheDir() string {
+	return s.cacheDir
 }
 
-func (s *Stager) SetLogger(l Logger) {
-	s.log = l
+func (s *Stager) DepsIdx() string {
+	return s.depsIdx
 }

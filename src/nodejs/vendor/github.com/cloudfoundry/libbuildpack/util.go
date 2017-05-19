@@ -87,6 +87,23 @@ func ExtractZip(zipfile, destDir string) error {
 	return nil
 }
 
+// Gets the buildpack directory
+func GetBuildpackDir() (string, error) {
+	var err error
+
+	bpDir := os.Getenv("BUILDPACK_DIR")
+
+	if bpDir == "" {
+		bpDir, err = filepath.Abs(filepath.Join(filepath.Dir(os.Args[0]), ".."))
+
+		if err != nil {
+			return "", err
+		}
+	}
+
+	return bpDir, nil
+}
+
 // ExtractTarGz extracts tar.gz to destDir
 func ExtractTarGz(tarfile, destDir string) error {
 	file, err := os.Open(tarfile)
