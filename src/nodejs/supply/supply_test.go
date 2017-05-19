@@ -81,9 +81,6 @@ var _ = Describe("Supply", func() {
 			Expect(err).To(BeNil())
 		}
 
-	})
-
-	JustBeforeEach(func() {
 		args := []string{buildDir, "", depsDir, depsIdx}
 		stager := libbuildpack.NewStager(args, logger, &libbuildpack.Manifest{})
 
