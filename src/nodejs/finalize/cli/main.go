@@ -14,6 +14,8 @@ import (
 
 func main() {
 	logger := libbuildpack.Logger{}
+	logger.SetOutput(os.Stdout)
+
 	buildpackDir, err := libbuildpack.GetBuildpackDir()
 	if err != nil {
 		logger.Error("Unable to determine buildpack directory: %s", err.Error())
