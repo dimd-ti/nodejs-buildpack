@@ -16,23 +16,22 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-//go:generate mockgen -source=../vendor/github.com/cloudfoundry/libbuildpack/command_runner.go --destination=mocks_command_runner_test.go --package=finalize_test
 //go:generate mockgen -source=finalize.go --destination=mocks_test.go --package=finalize_test
 
 var _ = Describe("Finalize", func() {
 	var (
-		err               error
-		buildDir          string
-		depsDir           string
-		depsIdx           string
-		finalizer         *finalize.Finalizer
-		logger            libbuildpack.Logger
-		buffer            *bytes.Buffer
-		mockCtrl          *gomock.Controller
-		mockCommandRunner *MockCommandRunner
-		mockYarn          *MockYarn
-		mockNPM           *MockNPM
-		mockManifest      *MockManifest
+		err          error
+		buildDir     string
+		depsDir      string
+		depsIdx      string
+		finalizer    *finalize.Finalizer
+		logger       libbuildpack.Logger
+		buffer       *bytes.Buffer
+		mockCtrl     *gomock.Controller
+		mockCommand  *MockCommand
+		mockYarn     *MockYarn
+		mockNPM      *MockNPM
+		mockManifest *MockManifest
 	)
 
 	BeforeEach(func() {
@@ -47,28 +46,25 @@ var _ = Describe("Finalize", func() {
 
 		buffer = new(bytes.Buffer)
 
-		logger = libbuildpack.NewLogger()
+		logger = libbuildpack.Logger{}
 		logger.SetOutput(ansicleaner.New(buffer))
 
 		mockCtrl = gomock.NewController(GinkgoT())
-		mockCommandRunner = NewMockCommandRunner(mockCtrl)
+		mockCommand = NewMockCommand(mockCtrl)
 		mockYarn = NewMockYarn(mockCtrl)
 		mockNPM = NewMockNPM(mockCtrl)
 		mockManifest = NewMockManifest(mockCtrl)
 
-		bps := &libbuildpack.Stager{
-			BuildDir: buildDir,
-			DepsDir:  depsDir,
-			DepsIdx:  depsIdx,
-			Log:      logger,
-			Command:  mockCommandRunner,
-		}
+		args := []string{buildDir, "", depsDir, depsIdx}
+		stager := libbuildpack.NewStager(args, logger, &libbuildpack.Manifest{})
 
 		finalizer = &finalize.Finalizer{
-			Stager:   bps,
+			Stager:   stager,
 			Yarn:     mockYarn,
 			NPM:      mockNPM,
 			Manifest: mockManifest,
+			Command:  mockCommand,
+			Log:      logger,
 		}
 	})
 
@@ -130,9 +126,9 @@ var _ = Describe("Finalize", func() {
 				Expect(ioutil.WriteFile(filepath.Join(buildDir, "package.json"), []byte(packageJSON), 0644)).To(Succeed())
 			})
 
-			It("sets CacheDirs", func() {
+			It("sets PackageJSONCacheDirs on the Cache", func() {
 				Expect(finalizer.ReadPackageJSON()).To(Succeed())
-				Expect(finalizer.CacheDirs).To(Equal([]string{"first", "second"}))
+				Expect(finalizer.Cache.PackageJSONCacheDirs).To(Equal([]string{"first", "second"}))
 			})
 		})
 
@@ -149,9 +145,9 @@ var _ = Describe("Finalize", func() {
 				Expect(ioutil.WriteFile(filepath.Join(buildDir, "package.json"), []byte(packageJSON), 0644)).To(Succeed())
 			})
 
-			It("sets CacheDirs", func() {
+			It("sets PackageJSONCacheDirs on the Cache", func() {
 				Expect(finalizer.ReadPackageJSON()).To(Succeed())
-				Expect(finalizer.CacheDirs).To(Equal([]string{"third", "fourth"}))
+				Expect(finalizer.Cache.PackageJSONCacheDirs).To(Equal([]string{"third", "fourth"}))
 			})
 		})
 
@@ -222,7 +218,7 @@ var _ = Describe("Finalize", func() {
 			})
 			It("initializes config based values", func() {
 				Expect(finalizer.ReadPackageJSON()).To(Succeed())
-				Expect(finalizer.CacheDirs).To(Equal([]string{}))
+				Expect(finalizer.Cache.PackageJSONCacheDirs).To(Equal([]string{}))
 			})
 		})
 
@@ -298,7 +294,7 @@ var _ = Describe("Finalize", func() {
 				})
 
 				It("runs the prebuild script", func() {
-					mockCommandRunner.EXPECT().Execute(buildDir, gomock.Any(), gomock.Any(), "yarn", "run", "prescriptive")
+					mockCommand.EXPECT().Execute(buildDir, gomock.Any(), gomock.Any(), "yarn", "run", "prescriptive")
 					Expect(finalizer.BuildDependencies()).To(Succeed())
 					Expect(buffer.String()).To(ContainSubstring("Running prescriptive (yarn)"))
 				})
@@ -310,7 +306,7 @@ var _ = Describe("Finalize", func() {
 				})
 
 				It("runs the postbuild script", func() {
-					mockCommandRunner.EXPECT().Execute(buildDir, gomock.Any(), gomock.Any(), "yarn", "run", "descriptive")
+					mockCommand.EXPECT().Execute(buildDir, gomock.Any(), gomock.Any(), "yarn", "run", "descriptive")
 					Expect(finalizer.BuildDependencies()).To(Succeed())
 					Expect(buffer.String()).To(ContainSubstring("Running descriptive (yarn)"))
 				})
@@ -330,7 +326,7 @@ var _ = Describe("Finalize", func() {
 				})
 
 				It("runs the prebuild script", func() {
-					mockCommandRunner.EXPECT().Execute(buildDir, gomock.Any(), gomock.Any(), "npm", "run", "prescriptive", "--if-present")
+					mockCommand.EXPECT().Execute(buildDir, gomock.Any(), gomock.Any(), "npm", "run", "prescriptive", "--if-present")
 					Expect(finalizer.BuildDependencies()).To(Succeed())
 					Expect(buffer.String()).To(ContainSubstring("Running prescriptive (npm)"))
 				})
@@ -355,7 +351,7 @@ var _ = Describe("Finalize", func() {
 				})
 
 				It("runs the postbuild script", func() {
-					mockCommandRunner.EXPECT().Execute(buildDir, gomock.Any(), gomock.Any(), "npm", "run", "descriptive", "--if-present")
+					mockCommand.EXPECT().Execute(buildDir, gomock.Any(), gomock.Any(), "npm", "run", "descriptive", "--if-present")
 					Expect(finalizer.BuildDependencies()).To(Succeed())
 					Expect(buffer.String()).To(ContainSubstring("Running descriptive (npm)"))
 				})
@@ -408,7 +404,7 @@ var _ = Describe("Finalize", func() {
 				})
 
 				It("lists the installed packages", func() {
-					mockCommandRunner.EXPECT().Execute(buildDir, gomock.Any(), ioutil.Discard, "yarn", "list", "--depth=0").Return(nil)
+					mockCommand.EXPECT().Execute(buildDir, gomock.Any(), ioutil.Discard, "yarn", "list", "--depth=0").Return(nil)
 					finalizer.ListDependencies()
 				})
 			})
@@ -431,7 +427,7 @@ var _ = Describe("Finalize", func() {
 				})
 
 				It("lists the installed packages", func() {
-					mockCommandRunner.EXPECT().Execute(buildDir, gomock.Any(), ioutil.Discard, "npm", "ls", "--depth=0").Return(nil)
+					mockCommand.EXPECT().Execute(buildDir, gomock.Any(), ioutil.Discard, "npm", "ls", "--depth=0").Return(nil)
 					finalizer.ListDependencies()
 				})
 			})

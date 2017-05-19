@@ -2,6 +2,7 @@ package finalize
 
 import (
 	"bytes"
+	"io"
 	"io/ioutil"
 	"nodejs/cache"
 	"os"
@@ -11,21 +12,33 @@ import (
 	"github.com/cloudfoundry/libbuildpack"
 )
 
-type Yarn interface {
-	Build() error
-}
-type NPM interface {
-	Build() error
-	Rebuild() error
+type Command interface {
+	Execute(string, io.Writer, io.Writer, string, ...string) error
 }
 
 type Manifest interface {
 	RootDir() string
 }
 
+type NPM interface {
+	Build() error
+	Rebuild() error
+}
+
+type Stager interface {
+	BuildDir() string
+	DepDir() string
+}
+
+type Yarn interface {
+	Build() error
+}
+
 type Finalizer struct {
-	Stager      *libbuildpack.Stager
-	CacheDirs   []string
+	Stager      Stager
+	Command     Command
+	Cache       cache.Cache
+	Log         libbuildpack.Logger
 	PreBuild    string
 	PostBuild   string
 	NPM         NPM
@@ -38,47 +51,46 @@ type Finalizer struct {
 
 func Run(f *Finalizer) error {
 	if err := f.ReadPackageJSON(); err != nil {
-		f.Stager.Log.Error("Failed parsing package.json: %s", err.Error())
+		f.Log.Error("Failed parsing package.json: %s", err.Error())
 		return err
 	}
 
 	if err := f.TipVendorDependencies(); err != nil {
-		f.Stager.Log.Error(err.Error())
+		f.Log.Error(err.Error())
 		return err
 	}
 
 	f.ListNodeConfig(os.Environ())
 
-	cacher, err := cache.New(f.Stager, f.CacheDirs)
-	if err != nil {
-		f.Stager.Log.Error("Unable to initialize cache: %s", err.Error())
+	if err := f.Cache.SetBinaryVersions(); err != nil {
+		f.Log.Error("Unable to check binary versions: %s", err.Error())
 		return err
 	}
 
-	if err := cacher.Restore(); err != nil {
-		f.Stager.Log.Error("Unable to restore cache: %s", err.Error())
+	if err := f.Cache.Restore(); err != nil {
+		f.Log.Error("Unable to restore cache: %s", err.Error())
 		return err
 	}
 
 	if err := f.BuildDependencies(); err != nil {
-		f.Stager.Log.Error("Unable to build dependencies: %s", err.Error())
+		f.Log.Error("Unable to build dependencies: %s", err.Error())
 		return err
 	}
 
-	if err := cacher.Save(); err != nil {
-		f.Stager.Log.Error("Unable to save cache: %s", err.Error())
+	if err := f.Cache.Save(); err != nil {
+		f.Log.Error("Unable to save cache: %s", err.Error())
 		return err
 	}
 
 	if err := f.CopyProfileScripts(); err != nil {
-		f.Stager.Log.Error("Unable to copy profile.d scripts: %s", err.Error())
+		f.Log.Error("Unable to copy profile.d scripts: %s", err.Error())
 		return err
 	}
 
 	f.ListDependencies()
 
 	if err := f.WarnNoStart(); err != nil {
-		f.Stager.Log.Error(err.Error())
+		f.Log.Error(err.Error())
 		return err
 	}
 
@@ -97,19 +109,18 @@ func (f *Finalizer) ReadPackageJSON() error {
 		} `json:"scripts"`
 	}
 
-	if f.UseYarn, err = libbuildpack.FileExists(filepath.Join(f.Stager.BuildDir, "yarn.lock")); err != nil {
+	if f.UseYarn, err = libbuildpack.FileExists(filepath.Join(f.Stager.BuildDir(), "yarn.lock")); err != nil {
 		return err
 	}
 
-	if f.NPMRebuild, err = libbuildpack.FileExists(filepath.Join(f.Stager.BuildDir, "node_modules")); err != nil {
+	if f.NPMRebuild, err = libbuildpack.FileExists(filepath.Join(f.Stager.BuildDir(), "node_modules")); err != nil {
 		return err
 	}
 
-	f.CacheDirs = []string{}
-
-	if err := libbuildpack.NewJSON().Load(filepath.Join(f.Stager.BuildDir, "package.json"), &p); err != nil {
+	j := &libbuildpack.JSON{}
+	if err := j.Load(filepath.Join(f.Stager.BuildDir(), "package.json"), &p); err != nil {
 		if os.IsNotExist(err) {
-			f.Stager.Log.Warning("No package.json found")
+			f.Log.Warning("No package.json found")
 			return nil
 		} else {
 			return err
@@ -117,9 +128,9 @@ func (f *Finalizer) ReadPackageJSON() error {
 	}
 
 	if len(p.CacheDirs1) > 0 {
-		f.CacheDirs = p.CacheDirs1
+		f.Cache.PackageJSONCacheDirs = p.CacheDirs1
 	} else if len(p.CacheDirs2) > 0 {
-		f.CacheDirs = p.CacheDirs2
+		f.Cache.PackageJSONCacheDirs = p.CacheDirs2
 	}
 	f.PreBuild = p.Scripts.PreBuild
 	f.PostBuild = p.Scripts.PostBuild
@@ -129,12 +140,12 @@ func (f *Finalizer) ReadPackageJSON() error {
 }
 
 func (f *Finalizer) TipVendorDependencies() error {
-	subdirs, err := hasSubdirs(filepath.Join(f.Stager.BuildDir, "node_modules"))
+	subdirs, err := hasSubdirs(filepath.Join(f.Stager.BuildDir(), "node_modules"))
 	if err != nil {
 		return err
 	}
 	if !subdirs {
-		f.Stager.Log.Protip("It is recommended to vendor the application's Node.js dependencies",
+		f.Log.Protip("It is recommended to vendor the application's Node.js dependencies",
 			"http://docs.cloudfoundry.org/buildpacks/node/index.html#vendoring")
 	}
 
@@ -147,7 +158,7 @@ func (f *Finalizer) ListNodeConfig(environment []string) {
 
 	for _, env := range environment {
 		if strings.HasPrefix(env, "NPM_CONFIG_") || strings.HasPrefix(env, "YARN_") || strings.HasPrefix(env, "NODE_") {
-			f.Stager.Log.Info(env)
+			f.Log.Info(env)
 		}
 
 		if env == "NPM_CONFIG_PRODUCTION=true" {
@@ -160,7 +171,7 @@ func (f *Finalizer) ListNodeConfig(environment []string) {
 	}
 
 	if npmConfigProductionTrue && nodeEnv != "production" {
-		f.Stager.Log.Info("npm scripts will see NODE_ENV=production (not '%s')\nhttps://docs.npmjs.com/misc/config#production", nodeEnv)
+		f.Log.Info("npm scripts will see NODE_ENV=production (not '%s')\nhttps://docs.npmjs.com/misc/config#production", nodeEnv)
 	}
 }
 
@@ -172,7 +183,7 @@ func (f *Finalizer) BuildDependencies() error {
 		tool = "npm"
 	}
 
-	f.Stager.Log.BeginStep("Building dependencies")
+	f.Log.BeginStep("Building dependencies")
 
 	if err := f.runPrebuild(tool); err != nil {
 		return err
@@ -184,7 +195,7 @@ func (f *Finalizer) BuildDependencies() error {
 		}
 	} else {
 		if f.NPMRebuild {
-			f.Stager.Log.Info("Prebuild detected (node_modules already exists)", f.PreBuild)
+			f.Log.Info("Prebuild detected (node_modules already exists)", f.PreBuild)
 			if err := f.NPM.Rebuild(); err != nil {
 				return err
 			}
@@ -216,18 +227,18 @@ func (f *Finalizer) ListDependencies() {
 	}
 
 	if f.UseYarn {
-		f.Stager.Command.Execute(f.Stager.BuildDir, os.Stdout, ioutil.Discard, "yarn", "list", "--depth=0")
+		f.Command.Execute(f.Stager.BuildDir(), os.Stdout, ioutil.Discard, "yarn", "list", "--depth=0")
 	} else {
-		f.Stager.Command.Execute(f.Stager.BuildDir, os.Stdout, ioutil.Discard, "npm", "ls", "--depth=0")
+		f.Command.Execute(f.Stager.BuildDir(), os.Stdout, ioutil.Discard, "npm", "ls", "--depth=0")
 	}
 }
 
 func (f *Finalizer) WarnNoStart() error {
-	procfileExists, err := libbuildpack.FileExists(filepath.Join(f.Stager.BuildDir, "Procfile"))
+	procfileExists, err := libbuildpack.FileExists(filepath.Join(f.Stager.BuildDir(), "Procfile"))
 	if err != nil {
 		return err
 	}
-	serverJsExists, err := libbuildpack.FileExists(filepath.Join(f.Stager.BuildDir, "server.js"))
+	serverJsExists, err := libbuildpack.FileExists(filepath.Join(f.Stager.BuildDir(), "server.js"))
 	if err != nil {
 		return err
 	}
@@ -235,7 +246,7 @@ func (f *Finalizer) WarnNoStart() error {
 	if !procfileExists && !serverJsExists && f.StartScript == "" {
 		warning := "This app may not specify any way to start a node process\n"
 		warning += "See: https://docs.cloudfoundry.org/buildpacks/node/node-tips.html#start"
-		f.Stager.Log.Warning(warning)
+		f.Log.Warning(warning)
 	}
 
 	return nil
@@ -263,9 +274,9 @@ func (f *Finalizer) runScript(script, tool string) error {
 		args = append(args, "--if-present")
 	}
 
-	f.Stager.Log.Info("Running %s (%s)", script, tool)
+	f.Log.Info("Running %s (%s)", script, tool)
 
-	return f.Stager.Command.Execute(f.Stager.BuildDir, os.Stdout, os.Stderr, tool, args...)
+	return f.Command.Execute(f.Stager.BuildDir(), os.Stdout, os.Stderr, tool, args...)
 
 }
 
@@ -290,7 +301,7 @@ func hasSubdirs(path string) (bool, error) {
 
 func (f *Finalizer) findVersion(binary string) (string, error) {
 	buffer := new(bytes.Buffer)
-	if err := f.Stager.Command.Execute("", buffer, ioutil.Discard, binary, "--version"); err != nil {
+	if err := f.Command.Execute("", buffer, ioutil.Discard, binary, "--version"); err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(buffer.String()), nil

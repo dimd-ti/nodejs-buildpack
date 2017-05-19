@@ -1,22 +1,33 @@
 package main
 
 import (
+	"nodejs/cache"
 	"nodejs/finalize"
 	_ "nodejs/hooks"
 	"nodejs/npm"
 	"nodejs/yarn"
 	"os"
+	"time"
 
 	"github.com/cloudfoundry/libbuildpack"
 )
 
 func main() {
-	stager, err := libbuildpack.NewStager(os.Args[1:], libbuildpack.NewLogger())
+	logger := libbuildpack.Logger{}
+	buildpackDir, err := libbuildpack.GetBuildpackDir()
 	if err != nil {
+		logger.Error("Unable to determine buildpack directory: %s", err.Error())
+		os.Exit(9)
+	}
+
+	manifest, err := libbuildpack.NewManifest(buildpackDir, time.Now())
+	if err != nil {
+		logger.Error("Unable to load buildpack manifest: %s", err.Error())
 		os.Exit(10)
 	}
 
-	if err := libbuildpack.SetStagingEnvironment(stager.DepsDir); err != nil {
+	stager := libbuildpack.NewStager(os.Args[1:], logger, manifest)
+	if err := libbuildpack.SetStagingEnvironment(stager.DepsDir()); err != nil {
 		stager.Log.Error("Unable to setup environment variables: %s", err.Error())
 		os.Exit(11)
 	}
@@ -24,16 +35,23 @@ func main() {
 	f := finalize.Finalizer{
 		Stager: stager,
 		Yarn: &yarn.Yarn{
-			BuildDir: stager.BuildDir,
-			Command:  stager.Command,
-			Logger:   stager.Log,
+			BuildDir: stager.BuildDir(),
+			Command:  libbuildpack.Command{},
+			Logger:   logger,
 		},
 		NPM: &npm.NPM{
-			BuildDir: stager.BuildDir,
-			Command:  stager.Command,
-			Logger:   stager.Log,
+			BuildDir: stager.BuildDir(),
+			Command:  libbuildpack.Command{},
+			Logger:   logger,
 		},
-		Manifest: stager.Manifest,
+		Manifest: manifest,
+		Log:      logger,
+		Cache: &cache.Cache{
+			Stager:  stager,
+			Command: libbuildpack.Command{},
+			Logger:  logger,
+			PackageJSONCacheDirs: []string{}
+		},
 	}
 
 	if err := finalize.Run(&f); err != nil {
