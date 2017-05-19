@@ -64,3 +64,22 @@ func (y *Yarn) Build() error {
 
 	return nil
 }
+
+type StdoutAndLog struct {
+	Logfile string
+}
+
+func (s *StdoutAndLog) Write(p []byte) (int, error) {
+	n, err := os.Stdout.Write(p)
+	if err != nil {
+		return n, err
+	}
+
+	f, err := os.OpenFile(s.Logfile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	defer f.Close()
+	if err != nil {
+		return 0, err
+	}
+
+	return f.Write(p)
+}
