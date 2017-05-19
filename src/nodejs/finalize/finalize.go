@@ -4,13 +4,18 @@ import (
 	"bytes"
 	"io"
 	"io/ioutil"
-	"nodejs/cache"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/cloudfoundry/libbuildpack"
 )
+
+type Cache interface {
+	Initialize() error
+	Restore() error
+	Save() error
+}
 
 type Command interface {
 	Execute(string, io.Writer, io.Writer, string, ...string) error
@@ -37,7 +42,7 @@ type Yarn interface {
 type Finalizer struct {
 	Stager      Stager
 	Command     Command
-	Cache       cache.Cache
+	Cache       Cache
 	Log         libbuildpack.Logger
 	PreBuild    string
 	PostBuild   string
@@ -62,8 +67,8 @@ func Run(f *Finalizer) error {
 
 	f.ListNodeConfig(os.Environ())
 
-	if err := f.Cache.SetBinaryVersions(); err != nil {
-		f.Log.Error("Unable to check binary versions: %s", err.Error())
+	if err := f.Cache.Initialize(); err != nil {
+		f.Log.Error("Unable to initialize cache: %s", err.Error())
 		return err
 	}
 
@@ -127,11 +132,6 @@ func (f *Finalizer) ReadPackageJSON() error {
 		}
 	}
 
-	if len(p.CacheDirs1) > 0 {
-		f.Cache.PackageJSONCacheDirs = p.CacheDirs1
-	} else if len(p.CacheDirs2) > 0 {
-		f.Cache.PackageJSONCacheDirs = p.CacheDirs2
-	}
 	f.PreBuild = p.Scripts.PreBuild
 	f.PostBuild = p.Scripts.PostBuild
 	f.StartScript = p.Scripts.StartScript

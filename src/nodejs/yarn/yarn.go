@@ -14,15 +14,10 @@ type Command interface {
 	Execute(dir string, stdout io.Writer, stderr io.Writer, program string, args ...string) error
 }
 
-type Logger interface {
-	Info(format string, args ...interface{})
-	Warning(format string, args ...interface{})
-}
-
 type Yarn struct {
 	BuildDir string
 	Command  Command
-	Logger   Logger
+	Logger   libbuildpack.Logger
 }
 
 func (y *Yarn) Build() error {

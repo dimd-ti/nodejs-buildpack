@@ -36,14 +36,12 @@ var _ = Describe("Yarn", func() {
 
 		buffer = new(bytes.Buffer)
 
-		logger = libbuildpack.NewLogger()
+		logger = libbuildpack.Logger{}
 		logger.SetOutput(ansicleaner.New(buffer))
 
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockCommand = NewMockCommand(mockCtrl)
-	})
 
-	JustBeforeEach(func() {
 		yarn = &y.Yarn{
 			BuildDir: buildDir,
 			Logger:   logger,

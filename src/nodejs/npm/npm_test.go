@@ -33,7 +33,7 @@ var _ = Describe("Yarn", func() {
 
 		buffer = new(bytes.Buffer)
 
-		logger = libbuildpack.NewLogger()
+		logger = libbuildpack.Logger{}
 		logger.SetOutput(ansicleaner.New(buffer))
 
 		mockCtrl = gomock.NewController(GinkgoT())

@@ -35,8 +35,12 @@ type Cache struct {
 
 var defaultCacheDirs = []string{".npm", ".cache/yarn", "bower_components"}
 
-func (c *Cache) SetBinaryVersions() error {
+func (c *Cache) Initialize() error {
 	var err error
+	var p struct {
+		CacheDirs1 []string `json:"cacheDirectories"`
+		CacheDirs2 []string `json:"cache_directories"`
+	}
 
 	if c.NodeVersion, err = c.findVersion("node"); err != nil {
 		return err
@@ -48,6 +52,21 @@ func (c *Cache) SetBinaryVersions() error {
 
 	if c.YarnVersion, err = c.findVersion("yarn"); err != nil {
 		return err
+	}
+
+	j := &libbuildpack.JSON{}
+	if err := j.Load(filepath.Join(c.Stager.BuildDir(), "package.json"), &p); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		} else {
+			return err
+		}
+	}
+
+	if len(p.CacheDirs1) > 0 {
+		c.PackageJSONCacheDirs = p.CacheDirs1
+	} else if len(p.CacheDirs2) > 0 {
+		c.PackageJSONCacheDirs = p.CacheDirs2
 	}
 
 	return nil

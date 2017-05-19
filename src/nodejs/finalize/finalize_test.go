@@ -113,43 +113,6 @@ var _ = Describe("Finalize", func() {
 	})
 
 	Describe("ReadPackageJSON", func() {
-		Context("package.json has cacheDirectories", func() {
-			BeforeEach(func() {
-				packageJSON := `
-{
-  "cacheDirectories" : [
-		"first",
-		"second"
-	]
-}
-`
-				Expect(ioutil.WriteFile(filepath.Join(buildDir, "package.json"), []byte(packageJSON), 0644)).To(Succeed())
-			})
-
-			It("sets PackageJSONCacheDirs on the Cache", func() {
-				Expect(finalizer.ReadPackageJSON()).To(Succeed())
-				Expect(finalizer.Cache.PackageJSONCacheDirs).To(Equal([]string{"first", "second"}))
-			})
-		})
-
-		Context("package.json has cache_directories", func() {
-			BeforeEach(func() {
-				packageJSON := `
-{
-  "cache_directories" : [
-		"third",
-		"fourth"
-	]
-}
-`
-				Expect(ioutil.WriteFile(filepath.Join(buildDir, "package.json"), []byte(packageJSON), 0644)).To(Succeed())
-			})
-
-			It("sets PackageJSONCacheDirs on the Cache", func() {
-				Expect(finalizer.ReadPackageJSON()).To(Succeed())
-				Expect(finalizer.Cache.PackageJSONCacheDirs).To(Equal([]string{"third", "fourth"}))
-			})
-		})
 
 		Context("package.json has prebuild script", func() {
 			BeforeEach(func() {
@@ -215,10 +178,6 @@ var _ = Describe("Finalize", func() {
 			It("warns user", func() {
 				Expect(finalizer.ReadPackageJSON()).To(Succeed())
 				Expect(buffer.String()).To(ContainSubstring("**WARNING** No package.json found"))
-			})
-			It("initializes config based values", func() {
-				Expect(finalizer.ReadPackageJSON()).To(Succeed())
-				Expect(finalizer.Cache.PackageJSONCacheDirs).To(Equal([]string{}))
 			})
 		})
 

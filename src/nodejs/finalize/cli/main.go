@@ -50,7 +50,6 @@ func main() {
 			Stager:  stager,
 			Command: libbuildpack.Command{},
 			Logger:  logger,
-			PackageJSONCacheDirs: []string{}
 		},
 	}
 

@@ -69,7 +69,7 @@ var _ = Describe("Cache", func() {
 		Expect(err).To(BeNil())
 	})
 
-	Describe("SetBinaryVersions", func() {
+	Describe("Initialize", func() {
 		BeforeEach(func() {
 			mockCommand.EXPECT().Execute("", gomock.Any(), gomock.Any(), "node", "--version").Do(func(_ string, buffer io.Writer, _ io.Writer, _ string, _ string) {
 				buffer.Write([]byte("6.9.3\n"))
@@ -85,19 +85,68 @@ var _ = Describe("Cache", func() {
 		})
 
 		It("sets node version", func() {
-			Expect(c.SetBinaryVersions()).To(Succeed())
+			Expect(c.Initialize()).To(Succeed())
 			Expect(c.NodeVersion).To(Equal("6.9.3"))
 		})
 
 		It("sets npm version", func() {
-			Expect(c.SetBinaryVersions()).To(Succeed())
+			Expect(c.Initialize()).To(Succeed())
 			Expect(c.NPMVersion).To(Equal("4.5.6"))
 		})
 
 		It("sets yarn version", func() {
-			Expect(c.SetBinaryVersions()).To(Succeed())
+			Expect(c.Initialize()).To(Succeed())
 			Expect(c.YarnVersion).To(Equal("9.8.7"))
 		})
+
+		It("sets yarn version", func() {
+			Expect(c.Initialize()).To(Succeed())
+			Expect(c.YarnVersion).To(Equal("9.8.7"))
+		})
+
+		It("initializes config based values", func() {
+			Expect(c.Initialize()).To(Succeed())
+			Expect(c.PackageJSONCacheDirs).To(Equal([]string{}))
+		})
+
+		Context("package.json has cacheDirectories", func() {
+			BeforeEach(func() {
+				packageJSON := `
+{
+  "cacheDirectories" : [
+		"first",
+		"second"
+	]
+}
+`
+				Expect(ioutil.WriteFile(filepath.Join(buildDir, "package.json"), []byte(packageJSON), 0644)).To(Succeed())
+			})
+
+			It("sets PackageJSONCacheDirs", func() {
+				Expect(c.Initialize()).To(Succeed())
+				Expect(c.PackageJSONCacheDirs).To(Equal([]string{"first", "second"}))
+			})
+		})
+
+		Context("package.json has cache_directories", func() {
+			BeforeEach(func() {
+				packageJSON := `
+{
+  "cache_directories" : [
+		"third",
+		"fourth"
+	]
+}
+`
+				Expect(ioutil.WriteFile(filepath.Join(buildDir, "package.json"), []byte(packageJSON), 0644)).To(Succeed())
+			})
+
+			It("sets PackageJSONCacheDirs", func() {
+				Expect(c.Initialize()).To(Succeed())
+				Expect(c.PackageJSONCacheDirs).To(Equal([]string{"third", "fourth"}))
+			})
+		})
+
 	})
 
 	Describe("Restore", func() {
