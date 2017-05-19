@@ -15,19 +15,19 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-//go:generate mockgen -source=../vendor/github.com/cloudfoundry/libbuildpack/command_runner.go --destination=mocks_command_runner_test.go --package=cache_test
+//go:generate mockgen -source=cache.go --destination=mocks_test.go --package=cache_test
 
 var _ = Describe("Cache", func() {
 	var (
-		err               error
-		buildDir          string
-		cacheDir          string
-		cacher            *cache.Cache
-		stager            *libbuildpack.Stager
-		logger            libbuildpack.Logger
-		buffer            *bytes.Buffer
-		mockCtrl          *gomock.Controller
-		mockCommandRunner *MockCommandRunner
+		err         error
+		buildDir    string
+		cacheDir    string
+		c           *cache.Cache
+		stager      *libbuildpack.Stager
+		logger      libbuildpack.Logger
+		buffer      *bytes.Buffer
+		mockCtrl    *gomock.Controller
+		mockCommand *MockCommand
 	)
 
 	BeforeEach(func() {
@@ -39,21 +39,19 @@ var _ = Describe("Cache", func() {
 
 		buffer = new(bytes.Buffer)
 
-		logger = libbuildpack.NewLogger()
+		logger = libbuildpack.Logger{}
 		logger.SetOutput(ansicleaner.New(buffer))
 
 		mockCtrl = gomock.NewController(GinkgoT())
-		mockCommandRunner = NewMockCommandRunner(mockCtrl)
+		mockCommand = NewMockCommand(mockCtrl)
 
-		stager = &libbuildpack.Stager{
-			BuildDir: buildDir,
-			CacheDir: cacheDir,
-			Log:      logger,
-			Command:  mockCommandRunner,
-		}
+		args := []string{buildDir, cacheDir}
+		stager = libbuildpack.NewStager(args, logger, &libbuildpack.Manifest{})
 
-		cacher = &cache.Cache{
+		c = &cache.Cache{
 			Stager:               stager,
+			Log:                  logger,
+			Command:              mockCommand,
 			NodeVersion:          "1.1.1",
 			NPMVersion:           "2.2.2",
 			YarnVersion:          "3.3.3",
@@ -71,43 +69,34 @@ var _ = Describe("Cache", func() {
 		Expect(err).To(BeNil())
 	})
 
-	Describe("New", func() {
+	Describe("SetBinaryVersions", func() {
 		BeforeEach(func() {
-			mockCommandRunner.EXPECT().Execute("", gomock.Any(), gomock.Any(), "node", "--version").Do(func(_ string, buffer io.Writer, _ io.Writer, _ string, _ string) {
+			mockCommand.EXPECT().Execute("", gomock.Any(), gomock.Any(), "node", "--version").Do(func(_ string, buffer io.Writer, _ io.Writer, _ string, _ string) {
 				buffer.Write([]byte("6.9.3\n"))
 			}).Return(nil)
 
-			mockCommandRunner.EXPECT().Execute("", gomock.Any(), gomock.Any(), "npm", "--version").Do(func(_ string, buffer io.Writer, _ io.Writer, _ string, _ string) {
+			mockCommand.EXPECT().Execute("", gomock.Any(), gomock.Any(), "npm", "--version").Do(func(_ string, buffer io.Writer, _ io.Writer, _ string, _ string) {
 				buffer.Write([]byte("4.5.6\n"))
 			}).Return(nil)
 
-			mockCommandRunner.EXPECT().Execute("", gomock.Any(), gomock.Any(), "yarn", "--version").Do(func(_ string, buffer io.Writer, _ io.Writer, _ string, _ string) {
+			mockCommand.EXPECT().Execute("", gomock.Any(), gomock.Any(), "yarn", "--version").Do(func(_ string, buffer io.Writer, _ io.Writer, _ string, _ string) {
 				buffer.Write([]byte("9.8.7\n"))
 			}).Return(nil)
 		})
 
 		It("sets node version", func() {
-			newCacher, err := cache.New(stager, []string{})
-			Expect(err).To(BeNil())
-			Expect(newCacher.NodeVersion).To(Equal("6.9.3"))
+			Expect(c.SetBinaryVersions()).To(Succeed())
+			Expect(c.NodeVersion).To(Equal("6.9.3"))
 		})
 
 		It("sets npm version", func() {
-			newCacher, err := cache.New(stager, []string{})
-			Expect(err).To(BeNil())
-			Expect(newCacher.NPMVersion).To(Equal("4.5.6"))
+			Expect(c.SetBinaryVersions()).To(Succeed())
+			Expect(c.NPMVersion).To(Equal("4.5.6"))
 		})
 
 		It("sets yarn version", func() {
-			newCacher, err := cache.New(stager, []string{})
-			Expect(err).To(BeNil())
-			Expect(newCacher.YarnVersion).To(Equal("9.8.7"))
-		})
-
-		It("sets PackageJSONCacheDirs", func() {
-			newCacher, err := cache.New(stager, []string{"directory"})
-			Expect(err).To(BeNil())
-			Expect(newCacher.PackageJSONCacheDirs).To(Equal([]string{"directory"}))
+			Expect(c.SetBinaryVersions()).To(Succeed())
+			Expect(c.YarnVersion).To(Equal("9.8.7"))
 		})
 	})
 
@@ -133,13 +122,13 @@ var _ = Describe("Cache", func() {
 				})
 
 				It("alerts user", func() {
-					Expect(cacher.Restore()).To(Succeed())
+					Expect(c.Restore()).To(Succeed())
 
 					Expect(buffer.String()).To(ContainSubstring("Skipping cache restore (new runtime signature)"))
 				})
 
 				It("does not restore the cache", func() {
-					Expect(cacher.Restore()).To(Succeed())
+					Expect(c.Restore()).To(Succeed())
 					files, err := ioutil.ReadDir(filepath.Join(buildDir))
 					Expect(err).To(BeNil())
 					Expect(len(files)).To(Equal(0))
@@ -153,7 +142,7 @@ var _ = Describe("Cache", func() {
 
 				Context("cached directories are not in build dir", func() {
 					It("alerts user", func() {
-						Expect(cacher.Restore()).To(Succeed())
+						Expect(c.Restore()).To(Succeed())
 
 						Expect(buffer.String()).To(ContainSubstring("Loading 3 from cacheDirectories (default):"))
 						Expect(buffer.String()).To(ContainSubstring("- .npm\n"))
@@ -162,7 +151,7 @@ var _ = Describe("Cache", func() {
 					})
 
 					It("moves the requested cached directories", func() {
-						Expect(cacher.Restore()).To(Succeed())
+						Expect(c.Restore()).To(Succeed())
 						files, err := ioutil.ReadDir(filepath.Join(buildDir))
 						Expect(err).To(BeNil())
 
@@ -181,11 +170,11 @@ var _ = Describe("Cache", func() {
 						Expect(os.MkdirAll(filepath.Join(cacheDir, "node", "second"), 0755)).To(Succeed())
 						Expect(ioutil.WriteFile(filepath.Join(cacheDir, "node", "second", "cached"), []byte("thing 2"), 0644)).To(Succeed())
 
-						cacher.PackageJSONCacheDirs = []string{"first", "second"}
+						c.PackageJSONCacheDirs = []string{"first", "second"}
 					})
 
 					It("alerts user", func() {
-						Expect(cacher.Restore()).To(Succeed())
+						Expect(c.Restore()).To(Succeed())
 
 						Expect(buffer.String()).To(ContainSubstring("Loading 2 from cacheDirectories (package.json):"))
 						Expect(buffer.String()).To(ContainSubstring("- first\n"))
@@ -193,7 +182,7 @@ var _ = Describe("Cache", func() {
 					})
 
 					It("moves the requested cached directories", func() {
-						Expect(cacher.Restore()).To(Succeed())
+						Expect(c.Restore()).To(Succeed())
 						files, err := ioutil.ReadDir(filepath.Join(buildDir))
 						Expect(err).To(BeNil())
 
@@ -210,7 +199,7 @@ var _ = Describe("Cache", func() {
 					})
 
 					It("alerts user", func() {
-						Expect(cacher.Restore()).To(Succeed())
+						Expect(c.Restore()).To(Succeed())
 
 						Expect(buffer.String()).To(ContainSubstring("Loading 3 from cacheDirectories (default):"))
 						Expect(buffer.String()).To(ContainSubstring("- .npm (exists - skipping)\n"))
@@ -219,7 +208,7 @@ var _ = Describe("Cache", func() {
 					})
 
 					It("moves the requested cached directories", func() {
-						Expect(cacher.Restore()).To(Succeed())
+						Expect(c.Restore()).To(Succeed())
 						files, err := ioutil.ReadDir(filepath.Join(buildDir))
 						Expect(err).To(BeNil())
 
@@ -236,7 +225,7 @@ var _ = Describe("Cache", func() {
 					})
 
 					It("alerts user", func() {
-						Expect(cacher.Restore()).To(Succeed())
+						Expect(c.Restore()).To(Succeed())
 
 						Expect(buffer.String()).To(ContainSubstring("Loading 3 from cacheDirectories (default):"))
 						Expect(buffer.String()).To(ContainSubstring("- .npm (not cached - skipping)\n"))
@@ -245,7 +234,7 @@ var _ = Describe("Cache", func() {
 					})
 
 					It("moves the requested cached directories", func() {
-						Expect(cacher.Restore()).To(Succeed())
+						Expect(c.Restore()).To(Succeed())
 						files, err := ioutil.ReadDir(filepath.Join(buildDir))
 						Expect(err).To(BeNil())
 
@@ -268,13 +257,13 @@ var _ = Describe("Cache", func() {
 					})
 
 					It("alerts user", func() {
-						Expect(cacher.Restore()).To(Succeed())
+						Expect(c.Restore()).To(Succeed())
 
 						Expect(buffer.String()).To(ContainSubstring("Skipping cache restore (disabled by config)"))
 					})
 
 					It("does not restore the cache", func() {
-						Expect(cacher.Restore()).To(Succeed())
+						Expect(c.Restore()).To(Succeed())
 						files, err := ioutil.ReadDir(filepath.Join(buildDir))
 						Expect(err).To(BeNil())
 						Expect(len(files)).To(Equal(0))
@@ -285,7 +274,7 @@ var _ = Describe("Cache", func() {
 
 		Context("there is not a cache", func() {
 			It("alerts user", func() {
-				Expect(cacher.Restore()).To(Succeed())
+				Expect(c.Restore()).To(Succeed())
 				Expect(buffer.String()).To(ContainSubstring("Skipping cache restore (no previous cache)"))
 			})
 		})
@@ -308,18 +297,18 @@ var _ = Describe("Cache", func() {
 		})
 
 		It("clears the previous cache", func() {
-			Expect(cacher.Save()).To(Succeed())
+			Expect(c.Save()).To(Succeed())
 			Expect(filepath.Join(cacheDir, "node", "old_cache")).NotTo(BeAnExistingFile())
 			Expect(buffer.String()).To(ContainSubstring("Clearing previous node cache"))
 		})
 
 		It("saves the signature to the cache", func() {
-			Expect(cacher.Save()).To(Succeed())
+			Expect(c.Save()).To(Succeed())
 			Expect(ioutil.ReadFile(filepath.Join(cacheDir, "node", "signature"))).To(Equal([]byte("1.1.1; 2.2.2; 3.3.3\n")))
 		})
 
 		It("removes .npm and .cache/yarn from the build dir", func() {
-			Expect(cacher.Save()).To(Succeed())
+			Expect(c.Save()).To(Succeed())
 			Expect(filepath.Join(buildDir, ".npm")).NotTo(BeAnExistingFile())
 			Expect(filepath.Join(buildDir, ".cache", "yarn")).NotTo(BeAnExistingFile())
 			Expect(ioutil.ReadFile(filepath.Join(buildDir, ".cache", "build3"))).To(Equal([]byte("build3")))
@@ -338,13 +327,13 @@ var _ = Describe("Cache", func() {
 			})
 
 			It("alerts user", func() {
-				Expect(cacher.Save()).To(Succeed())
+				Expect(c.Save()).To(Succeed())
 
 				Expect(buffer.String()).To(ContainSubstring("Skipping cache save (disabled by config)"))
 			})
 
 			It("does not save the cache", func() {
-				Expect(cacher.Save()).To(Succeed())
+				Expect(c.Save()).To(Succeed())
 				files, err := filepath.Glob(filepath.Join(cacheDir, "node", "*"))
 				Expect(err).To(BeNil())
 				Expect(files).To(Equal([]string{filepath.Join(cacheDir, "node", "signature")}))
@@ -359,11 +348,11 @@ var _ = Describe("Cache", func() {
 				Expect(os.MkdirAll(filepath.Join(buildDir, "second"), 0755)).To(Succeed())
 				Expect(ioutil.WriteFile(filepath.Join(buildDir, "second", "cached"), []byte("thing 2"), 0644)).To(Succeed())
 
-				cacher.PackageJSONCacheDirs = []string{"first", "second"}
+				c.PackageJSONCacheDirs = []string{"first", "second"}
 			})
 
 			It("alerts user", func() {
-				Expect(cacher.Save()).To(Succeed())
+				Expect(c.Save()).To(Succeed())
 
 				Expect(buffer.String()).To(ContainSubstring("Saving 2 cacheDirectories (package.json):"))
 				Expect(buffer.String()).To(ContainSubstring("- first\n"))
@@ -371,7 +360,7 @@ var _ = Describe("Cache", func() {
 			})
 
 			It("moves the requested cached directories", func() {
-				Expect(cacher.Save()).To(Succeed())
+				Expect(c.Save()).To(Succeed())
 				files, err := ioutil.ReadDir(filepath.Join(cacheDir, "node"))
 				Expect(err).To(BeNil())
 
@@ -384,7 +373,7 @@ var _ = Describe("Cache", func() {
 
 		Context("default cache dirs exist in build dir", func() {
 			It("alerts user", func() {
-				Expect(cacher.Save()).To(Succeed())
+				Expect(c.Save()).To(Succeed())
 
 				Expect(buffer.String()).To(ContainSubstring("Saving 3 cacheDirectories (default):"))
 				Expect(buffer.String()).To(ContainSubstring("- .npm\n"))
@@ -393,7 +382,7 @@ var _ = Describe("Cache", func() {
 			})
 
 			It("moves the requested cached directories", func() {
-				Expect(cacher.Save()).To(Succeed())
+				Expect(c.Save()).To(Succeed())
 				files, err := ioutil.ReadDir(filepath.Join(cacheDir, "node"))
 				Expect(err).To(BeNil())
 
@@ -411,7 +400,7 @@ var _ = Describe("Cache", func() {
 			})
 
 			It("alerts user", func() {
-				Expect(cacher.Save()).To(Succeed())
+				Expect(c.Save()).To(Succeed())
 
 				Expect(buffer.String()).To(ContainSubstring("Saving 3 cacheDirectories (default):"))
 				Expect(buffer.String()).To(ContainSubstring("- .npm (nothing to cache)\n"))
@@ -420,7 +409,7 @@ var _ = Describe("Cache", func() {
 			})
 
 			It("moves the requested cached directories", func() {
-				Expect(cacher.Save()).To(Succeed())
+				Expect(c.Save()).To(Succeed())
 				files, err := ioutil.ReadDir(filepath.Join(cacheDir, "node"))
 				Expect(err).To(BeNil())
 
