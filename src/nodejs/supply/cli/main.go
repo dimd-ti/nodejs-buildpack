@@ -4,13 +4,26 @@ import (
 	_ "nodejs/hooks"
 	"nodejs/supply"
 	"os"
+	"time"
 
 	"github.com/cloudfoundry/libbuildpack"
 )
 
 func main() {
-	logger := &libbuildpack.Logger{}
-	stager, err := libbuildpack.NewStager(os.Args[1:], logger))
+	logger := libbuildpack.Logger{}
+	buildpackDir, err := libbuildpack.GetBuildpackDir()
+	if err != nil {
+		logger.Error("Unable to determine buildpack directory: %s", err.Error())
+		os.Exit(8)
+	}
+
+	manifest, err := libbuildpack.NewManifest(buildpackDir, time.Now())
+	if err != nil {
+		logger.Error("Unable to load buildpack manifest: %s", err.Error())
+		os.Exit(9)
+	}
+
+	stager, err := libbuildpack.NewStager(os.Args[1:], logger, manifest)
 	if err != nil {
 		os.Exit(10)
 	}
@@ -32,10 +45,10 @@ func main() {
 	}
 
 	s := supply.Supplier{
-		Stager: stager,
-		Manifest: stager.Manifest(),
-		Log: logger
-		Command: libbuildpack.Command{}
+		Stager:   stager,
+		Manifest: manifest,
+		Log:      logger,
+		Command:  libbuildpack.Command{},
 	}
 
 	err = supply.Run(&s)

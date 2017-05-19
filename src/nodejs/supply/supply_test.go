@@ -21,19 +21,19 @@ import (
 
 var _ = Describe("Supply", func() {
 	var (
-		err               error
-		buildDir          string
-		depsDir           string
-		depsIdx           string
-		depDir            string
-		supplier          *supply.Supplier
-		logger            libbuildpack.Logger
-		buffer            *bytes.Buffer
-		mockCtrl          *gomock.Controller
-		mockManifest      *MockManifest
-		mockCommandRunner *MockCommandRunner
-		installNode       func(libbuildpack.Dependency, string)
-		installOnlyYarn   func(string, string)
+		err             error
+		buildDir        string
+		depsDir         string
+		depsIdx         string
+		depDir          string
+		supplier        *supply.Supplier
+		logger          libbuildpack.Logger
+		buffer          *bytes.Buffer
+		mockCtrl        *gomock.Controller
+		mockManifest    *MockManifest
+		mockCommand     *MockCommand
+		installNode     func(libbuildpack.Dependency, string)
+		installOnlyYarn func(string, string)
 	)
 
 	BeforeEach(func() {
@@ -51,12 +51,12 @@ var _ = Describe("Supply", func() {
 
 		buffer = new(bytes.Buffer)
 
-		logger = libbuildpack.NewLogger()
+		logger = libbuildpack.Logger{}
 		logger.SetOutput(ansicleaner.New(buffer))
 
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockManifest = NewMockManifest(mockCtrl)
-		mockCommandRunner = NewMockCommandRunner(mockCtrl)
+		mockCommand = NewMockCommand(mockCtrl)
 
 		installNode = func(dep libbuildpack.Dependency, nodeDir string) {
 			subDir := fmt.Sprintf("node-v%s-linux-x64", dep.Version)
@@ -84,17 +84,14 @@ var _ = Describe("Supply", func() {
 	})
 
 	JustBeforeEach(func() {
-		bps := &libbuildpack.Stager{
-			BuildDir: buildDir,
-			DepsDir:  depsDir,
-			DepsIdx:  depsIdx,
-			Log:      logger,
-			Manifest: mockManifest,
-			Command:  mockCommandRunner,
-		}
+		args := []string{buildDir, "", depsDir, depsIdx}
+		stager := libbuildpack.NewStager(args, logger, &libbuildpack.Manifest{})
 
 		supplier = &supply.Supplier{
-			Stager: bps,
+			Stager:   stager,
+			Log:      logger,
+			Manifest: mockManifest,
+			Command:  mockCommand,
 		}
 	})
 
@@ -354,7 +351,7 @@ var _ = Describe("Supply", func() {
 			BeforeEach(func() {
 				mockManifest.EXPECT().InstallOnlyVersion("yarn", yarnInstallDir).Do(installOnlyYarn).Return(nil)
 
-				mockCommandRunner.EXPECT().Execute(buildDir, gomock.Any(), gomock.Any(), "yarn", "--version").Do(func(_ string, buffer io.Writer, _ io.Writer, _ string, _ string) {
+				mockCommand.EXPECT().Execute(buildDir, gomock.Any(), gomock.Any(), "yarn", "--version").Do(func(_ string, buffer io.Writer, _ io.Writer, _ string, _ string) {
 					buffer.Write([]byte("0.32.5\n"))
 				}).Return(nil)
 			})
@@ -388,7 +385,7 @@ var _ = Describe("Supply", func() {
 				mockManifest.EXPECT().AllDependencyVersions("yarn").Return(versions)
 				mockManifest.EXPECT().InstallOnlyVersion("yarn", yarnInstallDir).Do(installOnlyYarn).Return(nil)
 
-				mockCommandRunner.EXPECT().Execute(buildDir, gomock.Any(), gomock.Any(), "yarn", "--version").Do(func(_ string, buffer io.Writer, _ io.Writer, _ string, _ string) {
+				mockCommand.EXPECT().Execute(buildDir, gomock.Any(), gomock.Any(), "yarn", "--version").Do(func(_ string, buffer io.Writer, _ io.Writer, _ string, _ string) {
 					buffer.Write([]byte("0.32.5\n"))
 				}).Return(nil)
 			})
@@ -419,7 +416,7 @@ var _ = Describe("Supply", func() {
 
 	Describe("InstallNPM", func() {
 		BeforeEach(func() {
-			mockCommandRunner.EXPECT().Execute(buildDir, gomock.Any(), gomock.Any(), "npm", "--version").Do(func(_ string, buffer io.Writer, _ io.Writer, _ string, _ string) {
+			mockCommand.EXPECT().Execute(buildDir, gomock.Any(), gomock.Any(), "npm", "--version").Do(func(_ string, buffer io.Writer, _ io.Writer, _ string, _ string) {
 				buffer.Write([]byte("1.2.3\n"))
 			}).Return(nil)
 		})
@@ -446,7 +443,7 @@ var _ = Describe("Supply", func() {
 			})
 
 			It("installs the requested npm version using packaged npm", func() {
-				mockCommandRunner.EXPECT().Execute(buildDir, gomock.Any(), gomock.Any(), "npm", "install", "--unsafe-perm", "--quiet", "-g", "npm@4.5.6").Return(nil)
+				mockCommand.EXPECT().Execute(buildDir, gomock.Any(), gomock.Any(), "npm", "install", "--unsafe-perm", "--quiet", "-g", "npm@4.5.6").Return(nil)
 				supplier.NPM = "4.5.6"
 
 				err = supplier.InstallNPM()

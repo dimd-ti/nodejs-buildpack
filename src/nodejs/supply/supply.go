@@ -14,7 +14,7 @@ import (
 )
 
 type Command interface {
-	Execute(string, io.Writer, io.Writer, string, ...string)
+	Execute(string, io.Writer, io.Writer, string, ...string) error
 }
 
 type Manifest interface {
@@ -24,16 +24,19 @@ type Manifest interface {
 	InstallOnlyVersion(string, string) error
 }
 
-type Logger interface {
-}
-
 type Stager interface {
+	BuildDir() string
+	DepDir() string
+	DepsIdx() string
+	LinkDirectoryInDepDir(string, string) error
+	WriteEnvFile(string, string) error
+	WriteProfileD(string, string) error
 }
 
 type Supplier struct {
 	Stager   Stager
 	Manifest Manifest
-	Log      Logger
+	Log      libbuildpack.Logger
 	Command  Command
 	Node     string
 	Yarn     string
@@ -87,7 +90,7 @@ func (s *Supplier) LoadPackageJSON() error {
 	var p packageJSON
 	j := &libbuildpack.JSON{}
 
-	err := j.Load(filepath.Join(s.Stager.BuildDir, "package.json"), &p)
+	err := j.Load(filepath.Join(s.Stager.BuildDir(), "package.json"), &p)
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -169,7 +172,7 @@ func (s *Supplier) InstallNode(tempDir string) error {
 
 func (s *Supplier) InstallNPM() error {
 	buffer := new(bytes.Buffer)
-	if err := s.Stager.Command.Execute(s.Stager.BuildDir, buffer, buffer, "npm", "--version"); err != nil {
+	if err := s.Command.Execute(s.Stager.BuildDir(), buffer, buffer, "npm", "--version"); err != nil {
 		return err
 	}
 
@@ -186,7 +189,7 @@ func (s *Supplier) InstallNPM() error {
 
 	s.Log.Info("Downloading and installing npm %s (replacing version %s)...", s.NPM, npmVersion)
 
-	if err := s.Stager.Command.Execute(s.Stager.BuildDir, ioutil.Discard, ioutil.Discard, "npm", "install", "--unsafe-perm", "--quiet", "-g", "npm@"+s.NPM); err != nil {
+	if err := s.Command.Execute(s.Stager.BuildDir(), ioutil.Discard, ioutil.Discard, "npm", "install", "--unsafe-perm", "--quiet", "-g", "npm@"+s.NPM); err != nil {
 		s.Log.Error("We're unable to download the version of npm you've provided (%s).\nPlease remove the npm version specification in package.json", s.NPM)
 		return err
 	}
@@ -213,7 +216,7 @@ func (s *Supplier) InstallYarn() error {
 	}
 
 	buffer := new(bytes.Buffer)
-	if err := s.Stager.Command.Execute(s.Stager.BuildDir, buffer, buffer, "yarn", "--version"); err != nil {
+	if err := s.Command.Execute(s.Stager.BuildDir(), buffer, buffer, "yarn", "--version"); err != nil {
 		return err
 	}
 
@@ -250,5 +253,5 @@ func (s *Supplier) CreateDefaultEnv() error {
 export NODE_ENV=${NODE_ENV:-production}
 `
 
-	return s.Stager.WriteProfileD("node.sh", fmt.Sprintf(scriptContents, filepath.Join("$DEPS_DIR", s.Stager.DepsIdx, "node")))
+	return s.Stager.WriteProfileD("node.sh", fmt.Sprintf(scriptContents, filepath.Join("$DEPS_DIR", s.Stager.DepsIdx(), "node")))
 }
