@@ -13,7 +13,7 @@
 			"importpath": "github.com/cloudfoundry/libbuildpack",
 			"repository": "https://github.com/cloudfoundry/libbuildpack",
 			"vcs": "git",
-			"revision": "e4deb2c8166f2309eace12996103f2c9ec344578",
+			"revision": "51d091edc72a94127c9a6915f383892f73fa48cd",
 			"branch": "dont-export-interfaces",
 			"notests": true
 		},
@@ -57,7 +57,7 @@
 			"importpath": "github.com/onsi/ginkgo",
 			"repository": "https://github.com/onsi/ginkgo",
 			"vcs": "git",
-			"revision": "83438ca4278f2f56757b9ab2cb15dd4f596d84e8",
+			"revision": "502bce873ec80059e9465bf32a9aa61e891b7009",
 			"branch": "master",
 			"notests": true
 		},
@@ -73,7 +73,7 @@
 			"importpath": "golang.org/x/net/html",
 			"repository": "https://go.googlesource.com/net",
 			"vcs": "git",
-			"revision": "c9b681d35165f1995d6f3034e61f8761d4b90c99",
+			"revision": "513929065c19401a1c7b76ecd942f9f86a0c061b",
 			"branch": "master",
 			"path": "html",
 			"notests": true
@@ -82,7 +82,7 @@
 			"importpath": "golang.org/x/sys/unix",
 			"repository": "https://go.googlesource.com/sys",
 			"vcs": "git",
-			"revision": "f845067cf72a21fb4929b0e6a35273bd83b56396",
+			"revision": "a2e06a18b0d52d8cb2010e04b372a1965d8e3439",
 			"branch": "master",
 			"path": "/unix",
 			"notests": true
