@@ -105,9 +105,7 @@ func Run(f *Finalizer) error {
 func (f *Finalizer) ReadPackageJSON() error {
 	var err error
 	var p struct {
-		CacheDirs1 []string `json:"cacheDirectories"`
-		CacheDirs2 []string `json:"cache_directories"`
-		Scripts    struct {
+		Scripts struct {
 			PreBuild    string `json:"heroku-prebuild"`
 			PostBuild   string `json:"heroku-postbuild"`
 			StartScript string `json:"start"`
