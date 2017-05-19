@@ -15,7 +15,7 @@ type Command interface {
 type NPM struct {
 	BuildDir string
 	Command  Command
-	Logger   libbuildpack.Logger
+	Log      libbuildpack.Logger
 }
 
 func (n *NPM) Build() error {
@@ -27,7 +27,7 @@ func (n *NPM) Build() error {
 		return nil
 	}
 
-	n.Logger.Info("Installing node modules (%s)", source)
+	n.Log.Info("Installing node modules (%s)", source)
 	npmArgs := []string{"install", "--unsafe-perm", "--userconfig", filepath.Join(n.BuildDir, ".npmrc"), "--cache", filepath.Join(n.BuildDir, ".npm")}
 	return n.Command.Execute(n.BuildDir, os.Stdout, os.Stdout, "npm", npmArgs...)
 }
@@ -41,12 +41,12 @@ func (n *NPM) Rebuild() error {
 		return nil
 	}
 
-	n.Logger.Info("Rebuilding any native modules")
+	n.Log.Info("Rebuilding any native modules")
 	if err := n.Command.Execute(n.BuildDir, os.Stdout, os.Stdout, "npm", "rebuild", "--nodedir="+os.Getenv("NODE_HOME")); err != nil {
 		return err
 	}
 
-	n.Logger.Info("Installing any new modules (%s)", source)
+	n.Log.Info("Installing any new modules (%s)", source)
 	npmArgs := []string{"install", "--unsafe-perm", "--userconfig", filepath.Join(n.BuildDir, ".npmrc")}
 	return n.Command.Execute(n.BuildDir, os.Stdout, os.Stdout, "npm", npmArgs...)
 }
@@ -58,7 +58,7 @@ func (n *NPM) doBuild() (bool, string, error) {
 	}
 
 	if !pkgExists {
-		n.Logger.Info("Skipping (no package.json)")
+		n.Log.Info("Skipping (no package.json)")
 		return false, "", nil
 	}
 

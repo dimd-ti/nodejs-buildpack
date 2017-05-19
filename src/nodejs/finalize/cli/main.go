@@ -27,8 +27,8 @@ func main() {
 	}
 
 	stager := libbuildpack.NewStager(os.Args[1:], logger, manifest)
-	if err := libbuildpack.SetStagingEnvironment(stager.DepsDir()); err != nil {
-		stager.Log.Error("Unable to setup environment variables: %s", err.Error())
+	if err := stager.SetStagingEnvironment(); err != nil {
+		logger.Error("Unable to setup environment variables: %s", err.Error())
 		os.Exit(11)
 	}
 
@@ -36,20 +36,20 @@ func main() {
 		Stager: stager,
 		Yarn: &yarn.Yarn{
 			BuildDir: stager.BuildDir(),
-			Command:  libbuildpack.Command{},
-			Logger:   logger,
+			Command:  &libbuildpack.Command{},
+			Log:      logger,
 		},
 		NPM: &npm.NPM{
 			BuildDir: stager.BuildDir(),
-			Command:  libbuildpack.Command{},
-			Logger:   logger,
+			Command:  &libbuildpack.Command{},
+			Log:      logger,
 		},
 		Manifest: manifest,
 		Log:      logger,
 		Cache: &cache.Cache{
 			Stager:  stager,
-			Command: libbuildpack.Command{},
-			Logger:  logger,
+			Command: &libbuildpack.Command{},
+			Log:     logger,
 		},
 	}
 
@@ -58,12 +58,12 @@ func main() {
 	}
 
 	if err := libbuildpack.RunAfterCompile(stager); err != nil {
-		stager.Log.Error("After Compile: %s", err.Error())
+		logger.Error("After Compile: %s", err.Error())
 		os.Exit(13)
 	}
 
-	if err := libbuildpack.SetLaunchEnvironment(stager.DepsDir, stager.BuildDir); err != nil {
-		stager.Log.Error("Unable to setup launch environment: %s", err.Error())
+	if err := stager.SetLaunchEnvironment(); err != nil {
+		logger.Error("Unable to setup launch environment: %s", err.Error())
 		os.Exit(14)
 	}
 

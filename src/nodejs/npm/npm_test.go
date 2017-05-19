@@ -38,12 +38,10 @@ var _ = Describe("Yarn", func() {
 
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockCommand = NewMockCommand(mockCtrl)
-	})
 
-	JustBeforeEach(func() {
 		npm = &n.NPM{
 			BuildDir: buildDir,
-			Logger:   logger,
+			Log:      logger,
 			Command:  mockCommand,
 		}
 	})

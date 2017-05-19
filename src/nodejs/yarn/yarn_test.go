@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"io"
 	"io/ioutil"
-	y "nodejs/yarn"
+	"nodejs/yarn"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,7 +22,7 @@ var _ = Describe("Yarn", func() {
 	var (
 		err         error
 		buildDir    string
-		yarn        *y.Yarn
+		y           *yarn.Yarn
 		logger      libbuildpack.Logger
 		buffer      *bytes.Buffer
 		mockCtrl    *gomock.Controller
@@ -42,9 +42,9 @@ var _ = Describe("Yarn", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockCommand = NewMockCommand(mockCtrl)
 
-		yarn = &y.Yarn{
+		y = &yarn.Yarn{
 			BuildDir: buildDir,
-			Logger:   logger,
+			Log:      logger,
 			Command:  mockCommand,
 		}
 	})
@@ -83,18 +83,18 @@ var _ = Describe("Yarn", func() {
 			})
 
 			It("tells the user it is running in offline mode", func() {
-				Expect(yarn.Build()).To(Succeed())
+				Expect(y.Build()).To(Succeed())
 				Expect(buffer.String()).To(ContainSubstring("Installing node modules (yarn.lock)"))
 				Expect(buffer.String()).To(ContainSubstring("Found yarn mirror directory " + filepath.Join(buildDir, "npm-packages-offline-cache")))
 				Expect(buffer.String()).To(ContainSubstring("Running yarn in offline mode"))
 			})
 
 			It("runs yarn config", func() {
-				Expect(yarn.Build()).To(Succeed())
+				Expect(y.Build()).To(Succeed())
 			})
 
 			It("runs yarn install with npm_config_nodedir", func() {
-				Expect(yarn.Build()).To(Succeed())
+				Expect(y.Build()).To(Succeed())
 			})
 
 			Context("package.json matches yarn.lock", func() {
@@ -103,7 +103,7 @@ var _ = Describe("Yarn", func() {
 				})
 
 				It("reports the fact", func() {
-					Expect(yarn.Build()).To(Succeed())
+					Expect(y.Build()).To(Succeed())
 					Expect(buffer.String()).To(ContainSubstring("yarn.lock and package.json match"))
 				})
 			})
@@ -114,7 +114,7 @@ var _ = Describe("Yarn", func() {
 				})
 
 				It("warns the user", func() {
-					Expect(yarn.Build()).To(Succeed())
+					Expect(y.Build()).To(Succeed())
 					Expect(buffer.String()).To(ContainSubstring("**WARNING** yarn.lock is outdated"))
 				})
 			})
@@ -132,14 +132,14 @@ var _ = Describe("Yarn", func() {
 			})
 
 			It("tells the user it is running in online mode", func() {
-				Expect(yarn.Build()).To(Succeed())
+				Expect(y.Build()).To(Succeed())
 				Expect(buffer.String()).To(ContainSubstring("Installing node modules (yarn.lock)"))
 				Expect(buffer.String()).To(ContainSubstring("Running yarn in online mode"))
 				Expect(buffer.String()).To(ContainSubstring("To run yarn in offline mode, see: https://yarnpkg.com/blog/2016/11/24/offline-mirror"))
 			})
 
 			It("runs yarn install", func() {
-				Expect(yarn.Build()).To(Succeed())
+				Expect(y.Build()).To(Succeed())
 			})
 
 			Context("package.json matches yarn.lock", func() {
@@ -148,7 +148,7 @@ var _ = Describe("Yarn", func() {
 				})
 
 				It("reports the fact", func() {
-					Expect(yarn.Build()).To(Succeed())
+					Expect(y.Build()).To(Succeed())
 					Expect(buffer.String()).To(ContainSubstring("yarn.lock and package.json match"))
 				})
 			})
@@ -159,7 +159,7 @@ var _ = Describe("Yarn", func() {
 				})
 
 				It("warns the user", func() {
-					Expect(yarn.Build()).To(Succeed())
+					Expect(y.Build()).To(Succeed())
 					Expect(buffer.String()).To(ContainSubstring("**WARNING** yarn.lock is outdated"))
 				})
 			})

@@ -23,7 +23,7 @@ func main() {
 		os.Exit(10)
 	}
 
-	stager = libbuildpack.NewStager(os.Args[1:], logger, manifest)
+	stager := libbuildpack.NewStager(os.Args[1:], logger, manifest)
 	if err := stager.CheckBuildpackValid(); err != nil {
 		os.Exit(11)
 	}
@@ -34,7 +34,7 @@ func main() {
 		os.Exit(12)
 	}
 
-	err = libbuildpack.SetStagingEnvironment(stager.DepsDir)
+	err = stager.SetStagingEnvironment()
 	if err != nil {
 		logger.Error("Unable to setup environment variables: %s", err.Error())
 		os.Exit(13)
@@ -44,7 +44,7 @@ func main() {
 		Stager:   stager,
 		Manifest: manifest,
 		Log:      logger,
-		Command:  libbuildpack.Command{},
+		Command:  &libbuildpack.Command{},
 	}
 
 	err = supply.Run(&s)
