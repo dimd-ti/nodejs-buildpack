@@ -69,9 +69,7 @@ describe 'CF NodeJS Buildpack' do
 
     it 'displays a nice error messages and gracefully fails' do
       expect(app).to_not be_running
-      expect(app).to have_logged 'Installing node 9000.0.0'
-      expect(app).to_not have_logged 'Downloaded ['
-      expect(app).to have_logged /DEPENDENCY MISSING IN MANIFEST: node 9000\.0\.0.*-----> Build failed/m
+      expect(app).to have_logged /Unable to install node: no match found for 9000.0.0/
     end
   end
 
@@ -80,9 +78,7 @@ describe 'CF NodeJS Buildpack' do
 
     it 'displays a nice error messages and gracefully fails' do
       expect(app).to_not be_running
-      expect(app).to have_logged 'Installing node 4.1.1'
-      expect(app).to_not have_logged 'Downloaded ['
-      expect(app).to have_logged /DEPENDENCY MISSING IN MANIFEST: node 4\.1\.1.*-----> Build failed/m
+      expect(app).to have_logged /Unable to install node: no match found for 4.1.1/
     end
   end
 
@@ -90,7 +86,7 @@ describe 'CF NodeJS Buildpack' do
     let(:app_name) { 'vendored_dependencies' }
 
     it 'does not output protip that recommends user vendors dependencies' do
-      expect(app).not_to have_logged("PRO TIP: It is recommended to vendor the application's Node.js dependencies")
+      expect(app).not_to have_logged(/PRO TIP:(.*) It is recommended to vendor the application's Node.js dependencies/)
     end
 
     context 'with an uncached buildpack', :uncached do
@@ -111,7 +107,7 @@ describe 'CF NodeJS Buildpack' do
         expect(browser).to have_body('Hello, World!')
 
         expect(app).not_to have_internet_traffic
-        expect(app).to have_logged(/Downloaded \[file:\/\/.*\]/)
+        expect(app).to have_logged(/Copy \[.*\]/)
       end
     end
   end
@@ -173,7 +169,7 @@ describe 'CF NodeJS Buildpack' do
     end
 
     it 'outputs protip that recommends user vendors dependencies' do
-      expect(app).to have_logged("PRO TIP: It is recommended to vendor the application's Node.js dependencies")
+      expect(app).to have_logged(/PRO TIP:(.*) It is recommended to vendor the application's Node.js dependencies/)
     end
   end
 
